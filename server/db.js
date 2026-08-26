@@ -9,8 +9,8 @@ import {
 } from './config.js'
 
 const dbPool = mysql.createPool({
-  host: DB_HOST,
-  port: DB_PORT,
+  host: process.env.DB_HOST,
+  port: parseInt(process.env.DB_PORT || '3306'),
   user: DB_USER,
   password: DB_PASS,
   database: DB_NAME,

@@ -28,10 +28,10 @@ async function healthCheck(_req, res) {
     mysql: {
       status: mysqlStatus,
       error: mysqlError,
-      host: DB_HOST,
-      port: DB_PORT,
-      user: DB_USER,
-      database: DB_NAME,
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT,
+      user: process.env.DB_USER,
+      database: process.env.DB_NAME,
       dbUrlSet: !!process.env.DATABASE_URL,
     },
   })
