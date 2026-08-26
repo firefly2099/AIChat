@@ -1,0 +1,5 @@
+[build]
+command = "npm ci --omit=dev"
+
+[deploy]
+startCommand = "node server/index.js"
