@@ -17,11 +17,40 @@ const QWEN_API_KEY = process.env.QWEN_API_KEY
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY
 const QWEN_API_BASE_URL = process.env.QWEN_API_BASE_URL || QWEN_DEFAULT_BASE_URL
 const DEEPSEEK_API_BASE_URL = process.env.DEEPSEEK_API_BASE_URL || DEEPSEEK_DEFAULT_BASE_URL
-const MYSQL_HOST = process.env.MYSQL_HOST || '127.0.0.1'
-const MYSQL_PORT = Number(process.env.MYSQL_PORT || 3306)
-const MYSQL_USER = process.env.MYSQL_USER || 'root'
-const MYSQL_PASSWORD = process.env.MYSQL_PASSWORD || ''
-const MYSQL_DATABASE = process.env.MYSQL_DATABASE || 'aichat'
+
+/**
+ * 解析 MySQL 连接：优先读单变量 MYSQL_URL（Railway/PlanetScale 托管服务通常只给一条连接串），
+ * 格式 mysql://user:password@host:port/database。
+ * 若未设置 MYSQL_URL，则回退到逐个变量（MYSQL_HOST / MYSQL_PORT / MYSQL_USER / MYSQL_PASSWORD / MYSQL_DATABASE）。
+ */
+function parseMySQLUrl(url) {
+  if (!url) return null
+  try {
+    // mysql://user:password@host:port/dbname
+    const stripped = url.replace(/^mysql:\/\//i, '')
+    const [userPart, hostPart] = stripped.split('@')
+    if (!userPart || !hostPart) return null
+    const [user, password] = userPart.split(':')
+    const [hostPort, database] = hostPart.split('/')
+    const [host, port] = hostPort.split(':')
+    return {
+      host: decodeURIComponent(host || ''),
+      port: Number(port || 3306),
+      user: decodeURIComponent(user || ''),
+      password: decodeURIComponent(password || ''),
+      database: decodeURIComponent(database || ''),
+    }
+  } catch {
+    return null
+  }
+}
+
+const mysqlUrl = parseMySQLUrl(process.env.MYSQL_URL)
+const MYSQL_HOST = mysqlUrl ? mysqlUrl.host : (process.env.MYSQL_HOST || '127.0.0.1')
+const MYSQL_PORT = mysqlUrl ? mysqlUrl.port : Number(process.env.MYSQL_PORT || 3306)
+const MYSQL_USER = mysqlUrl ? mysqlUrl.user : (process.env.MYSQL_USER || 'root')
+const MYSQL_PASSWORD = mysqlUrl ? mysqlUrl.password : (process.env.MYSQL_PASSWORD || '')
+const MYSQL_DATABASE = mysqlUrl ? mysqlUrl.database : (process.env.MYSQL_DATABASE || 'aichat')
 
 const DEVICE_TOKEN_HEADER = 'x-device-token'
 
