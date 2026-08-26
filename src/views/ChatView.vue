@@ -676,10 +676,10 @@ const restoreSession = async (id: string) => {
   // 后端 chat_messages 不存这些字段，刷新后靠 localStorage 按下标补回。
   const extras = loadMessageExtras(id)
   if (Object.keys(extras).length > 0) {
-    messages.value = messages.value.map((m, i) => {
+    messages.value = messages.value.map((m, i): Message => {
       const ex = extras[i]
-      if (!ex) return m
-      return { ...m, attachments: ex.attachments, files: ex.files, fileContext: ex.fileContext }
+      if (!ex) return { ...m } as Message
+      return { ...m, attachments: ex.attachments, files: ex.files, fileContext: ex.fileContext } as Message
     })
   }
   chatTitle.value = target.title || '新对话'
@@ -706,7 +706,7 @@ const restoreSession = async (id: string) => {
         id: Date.now(),
         role: 'user',
         content: prompt,
-        attachments: imageData.length ? imageData.map((i) => ({ url: i.url })) : undefined,
+        attachments: imageData.length ? imageData : undefined,
         files: files.length ? files : undefined,
         fileContext,
       },
