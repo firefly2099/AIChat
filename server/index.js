@@ -32,6 +32,17 @@ app.use(corsMiddleware)
 app.use(securityHeadersMiddleware)
 app.use(ensureToken)
 
+// 根路径健康检查（供运维/负载均衡探活，返回 JSON 而非 Express 默认 HTML 错误页）
+app.get('/', (_req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'aichat',
+    version: '1.0.0',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  })
+})
+
 // 所有 /api 接口由 routes.js 提供
 app.use('/api', router)
 

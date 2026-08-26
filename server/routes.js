@@ -2,6 +2,7 @@
 import express from 'express'
 import { rateLimit, chatRateLimit, requireAuth } from './middleware.js'
 import { getModels } from './controllers/modelsController.js'
+import { healthCheck } from './controllers/healthController.js'
 import {
   listSessions,
   getSession,
@@ -18,6 +19,7 @@ import { streamChat } from './controllers/chatController.js'
 const router = express.Router()
 
 router.get('/models', rateLimit, getModels)
+router.get('/health', rateLimit, healthCheck)
 router.get('/sessions', rateLimit, requireAuth, listSessions)
 router.get('/sessions/:sessionId', rateLimit, requireAuth, getSession)
 router.post('/sessions', rateLimit, requireAuth, createSession)
