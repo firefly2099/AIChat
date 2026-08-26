@@ -523,13 +523,13 @@ const flushRemoteSnapshot = async () => {
   // 快照落库前，先把附件扩展信息（图片/文件/提取文本）写入 localStorage。
   // 后端不存这些字段，刷新后需靠本地按下标合并回消息。
   // 用客户端消息 id 匹配快照数组下标，保证下标与后端 sort_order 对齐。
-  const extrasById = new Map<number, { attachments?: { url: string }[]; files?: { name: string; size: number }[]; fileContext?: string }>()
+  const extrasById = new Map<number, { attachments?: { url: string; mime: string }[]; files?: { name: string; size: number }[]; fileContext?: string }>()
   for (const m of messages.value) {
     if (m.attachments?.length || m.files?.length || m.fileContext) {
       extrasById.set(m.id, { attachments: m.attachments, files: m.files, fileContext: m.fileContext })
     }
   }
-  const extrasByIndex: Record<number, { attachments?: { url: string }[]; files?: { name: string; size: number }[]; fileContext?: string }> = {}
+  const extrasByIndex: Record<number, { attachments?: { url: string; mime: string }[]; files?: { name: string; size: number }[]; fileContext?: string }> = {}
   snapshot.messages.forEach((m, i) => {
     const ex = extrasById.get(m.id)
     if (ex) extrasByIndex[i] = ex

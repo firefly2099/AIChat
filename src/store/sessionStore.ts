@@ -160,7 +160,7 @@ export function takePendingAttachments(sessionID: string): File[] | undefined {
  * 故仅 localStorage 持久化，刷新后按下标合并回消息。
  */
 export type MessageExtras = {
-  attachments?: { url: string }[]
+  attachments?: { url: string; mime: string }[]
   files?: { name: string; size: number }[]
   fileContext?: string
 }
