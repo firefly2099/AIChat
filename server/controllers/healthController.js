@@ -33,6 +33,8 @@ async function healthCheck(_req, res) {
       user: MYSQL_USER,
       database: MYSQL_DATABASE,
       mysqlUrlSet: !!process.env.MYSQL_URL,
+      mysqlUrlValue: process.env.MYSQL_URL ? '***SET***' : '***UNSET***',
+      envKeys: Object.keys(process.env).filter(k => k.startsWith('MYSQL') || k.startsWith('DEEPSEEK')).sort(),
     },
   })
 }
