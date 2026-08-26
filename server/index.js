@@ -17,7 +17,7 @@ import { ensureTables } from './db.js'
 import router from './routes.js'
 
 const app = express()
-const port = 3001
+const port = Number(process.env.PORT || 3001)
 
 // 关闭默认 X-Powered-By 头，降低框架信息暴露。
 app.disable('x-powered-by')
