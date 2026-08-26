@@ -25,7 +25,7 @@ async function healthCheck(_req, res) {
     version: '1.0.0',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
-    mysql: {
+      mysql: {
       status: mysqlStatus,
       error: mysqlError,
       host: MYSQL_HOST,
@@ -34,7 +34,8 @@ async function healthCheck(_req, res) {
       database: MYSQL_DATABASE,
       mysqlUrlSet: !!process.env.MYSQL_URL,
       mysqlUrlValue: process.env.MYSQL_URL ? '***SET***' : '***UNSET***',
-      envKeys: Object.keys(process.env).filter(k => k.startsWith('MYSQL') || k.startsWith('DEEPSEEK')).sort(),
+      // 列出所有环境变量键（仅键名，不含值）
+      allEnvKeys: Object.keys(process.env).sort(),
     },
   })
 }
