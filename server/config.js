@@ -19,11 +19,11 @@ const QWEN_API_BASE_URL = process.env.QWEN_API_BASE_URL || QWEN_DEFAULT_BASE_URL
 const DEEPSEEK_API_BASE_URL = process.env.DEEPSEEK_API_BASE_URL || DEEPSEEK_DEFAULT_BASE_URL
 
 /**
- * 解析 MySQL 连接：优先读单变量 MYSQL_URL（Railway/PlanetScale 托管服务通常只给一条连接串），
+ * 解析 MySQL 连接：优先读单变量 DATABASE_URL（Railway/Render 等托管服务通常只给一条连接串），
  * 格式 mysql://user:password@host:port/database。
- * 若未设置 MYSQL_URL，则回退到逐个变量（MYSQL_HOST / MYSQL_PORT / MYSQL_USER / MYSQL_PASSWORD / MYSQL_DATABASE）。
+ * 若未设置 DATABASE_URL，则回退到逐个变量（DB_HOST / DB_PORT / DB_USER / DB_PASS / DB_NAME）。
  */
-function parseMySQLUrl(url) {
+function parseDatabaseUrl(url) {
   if (!url) return null
   try {
     // mysql://user:password@host:port/dbname
@@ -45,12 +45,12 @@ function parseMySQLUrl(url) {
   }
 }
 
-const mysqlUrl = parseMySQLUrl(process.env.MYSQL_URL)
-const MYSQL_HOST = mysqlUrl ? mysqlUrl.host : (process.env.MYSQL_HOST || '127.0.0.1')
-const MYSQL_PORT = mysqlUrl ? mysqlUrl.port : Number(process.env.MYSQL_PORT || 3306)
-const MYSQL_USER = mysqlUrl ? mysqlUrl.user : (process.env.MYSQL_USER || 'root')
-const MYSQL_PASSWORD = mysqlUrl ? mysqlUrl.password : (process.env.MYSQL_PASSWORD || '')
-const MYSQL_DATABASE = mysqlUrl ? mysqlUrl.database : (process.env.MYSQL_DATABASE || 'aichat')
+const dbUrlParsed = parseDatabaseUrl(process.env.DATABASE_URL)
+const DB_HOST = dbUrlParsed ? dbUrlParsed.host : (process.env.DB_HOST || '127.0.0.1')
+const DB_PORT = dbUrlParsed ? dbUrlParsed.port : Number(process.env.DB_PORT || 3306)
+const DB_USER = dbUrlParsed ? dbUrlParsed.user : (process.env.DB_USER || 'root')
+const DB_PASS = dbUrlParsed ? dbUrlParsed.password : (process.env.DB_PASS || '')
+const DB_NAME = dbUrlParsed ? dbUrlParsed.database : (process.env.DB_NAME || 'aichat')
 
 const DEVICE_TOKEN_HEADER = 'x-device-token'
 
@@ -106,11 +106,11 @@ export {
   DEEPSEEK_API_KEY,
   QWEN_API_BASE_URL,
   DEEPSEEK_API_BASE_URL,
-  MYSQL_HOST,
-  MYSQL_PORT,
-  MYSQL_USER,
-  MYSQL_PASSWORD,
-  MYSQL_DATABASE,
+  DB_HOST,
+  DB_PORT,
+  DB_USER,
+  DB_PASS,
+  DB_NAME,
   DEVICE_TOKEN_HEADER,
   CORS_ORIGINS,
   fallbackModels,

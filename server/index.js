@@ -5,10 +5,10 @@ import express from 'express'
 import {
   QWEN_API_BASE_URL,
   DEEPSEEK_API_BASE_URL,
-  MYSQL_HOST,
-  MYSQL_PORT,
-  MYSQL_USER,
-  MYSQL_DATABASE,
+  DB_HOST,
+  DB_PORT,
+  DB_USER,
+  DB_NAME,
   QWEN_API_KEY,
   DEEPSEEK_API_KEY,
 } from './config.js'
@@ -53,7 +53,7 @@ app.listen(port, () => {
   console.log(`AI chat server running at http://localhost:${port}`)
   console.log(`Qwen API base URL: ${QWEN_API_BASE_URL}`)
   console.log(`DeepSeek API base URL: ${DEEPSEEK_API_BASE_URL}`)
-  console.log(`MySQL DSN: ${MYSQL_USER}@${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}`)
+  console.log(`MySQL DSN: ${DB_USER}@${DB_HOST}:${DB_PORT}/${DB_NAME}`)
   console.log(QWEN_API_KEY ? 'Qwen API Key 已配置' : '未配置 QWEN_API_KEY')
   console.log(DEEPSEEK_API_KEY ? 'DeepSeek API Key 已配置' : '未配置 DEEPSEEK_API_KEY')
 })
