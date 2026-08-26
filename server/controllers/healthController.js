@@ -1,10 +1,11 @@
 // 健康检查控制器：返回服务状态 + MySQL 连接状态。
 import { dbPool } from '../db.js'
+import { MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_DATABASE } from '../config.js'
 
 /**
  * GET /api/health
  * 轻量健康检查端点，供 Railway/负载均衡探活。
- * 同时返回 MySQL 连接状态，方便排查数据库层面问题。
+ * 同时返回 MySQL 连接状态 + 实际解析到的配置（不含密码），方便排查。
  */
 async function healthCheck(_req, res) {
   let mysqlStatus = 'unknown'
@@ -27,6 +28,11 @@ async function healthCheck(_req, res) {
     mysql: {
       status: mysqlStatus,
       error: mysqlError,
+      host: MYSQL_HOST,
+      port: MYSQL_PORT,
+      user: MYSQL_USER,
+      database: MYSQL_DATABASE,
+      mysqlUrlSet: !!process.env.MYSQL_URL,
     },
   })
 }

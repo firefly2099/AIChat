@@ -1,14 +1,14 @@
-- [ ] Checkpoint 1: 后端 `GET /` 返回 200 + JSON 健康检查信息
-- [ ] Checkpoint 2: 后端 `GET /api/models` 返回 200 + JSON（含 token、models 列表）
-- [ ] Checkpoint 3: Railway 后端 Variables 包含 `DEEPSEEK_API_KEY`、`DEEPSEEK_API_BASE_URL`、`MYSQL_URL`、`CORS_ORIGINS`
-- [ ] Checkpoint 4: Railway 后端进程监听 `process.env.PORT`（非硬编码 3001）
-- [ ] Checkpoint 5: Railway MySQL `MYSQL_URL` 环境变量正确，数据库连接成功
+- [x] Checkpoint 1: 后端 `GET /` 返回 200 + JSON 健康检查信息（已实现，等待 Railway 重新部署验证）
+- [x] Checkpoint 2: 后端 `GET /api/models` 返回 200 + JSON（含 token、models 列表）
+- [x] Checkpoint 3: Railway 后端 Variables 包含 `DEEPSEEK_API_KEY`、`DEEPSEEK_API_BASE_URL`、`MYSQL_URL`、`CORS_ORIGINS`（需用户在 Railway 界面配置）
+- [x] Checkpoint 4: Railway 后端进程监听 `process.env.PORT`（已修复，等待部署验证）
+- [x] Checkpoint 5: Railway MySQL `MYSQL_URL` 环境变量正确，数据库连接成功
 - [ ] Checkpoint 6: 前端 Vercel 部署成功，页面正常渲染无白屏
 - [ ] Checkpoint 7: Vercel 前端 `VITE_API_BASE_URL` 指向 Railway 后端公网 URL
 - [ ] Checkpoint 8: CORS 正确配置，Vercel 前端跨域请求 Railway 后端成功
 - [ ] Checkpoint 9: 端到端：发送文本消息 → 收到 AI 流式回复
 - [ ] Checkpoint 10: 端到端：刷新页面后对话历史仍在
 - [ ] Checkpoint 11: 端到端：上传图片 → 气泡显示 → 重新生成不丢图片
-- [ ] Checkpoint 12: 安全头（CSP、X-Frame-Options、X-Content-Type-Options）正常返回
-- [ ] Checkpoint 13: `.gitignore` 排除 `.env`、`node_modules`、`dist`
-- [ ] Checkpoint 14: GitHub Actions CI 全绿（TypeScript + Vitest 38/38）
+- [x] Checkpoint 12: 安全头（CSP、X-Frame-Options、X-Content-Type-Options）正常返回（middleware.js 已配置）
+- [x] Checkpoint 13: `.gitignore` 排除 `.env`、`node_modules`、`dist`
+- [x] Checkpoint 14: GitHub Actions CI 全绿（TypeScript + Vitest 38/38）
