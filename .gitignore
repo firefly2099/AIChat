@@ -1,0 +1,36 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+# 代码运行时产生的本地调试日志（server/ src/ tests/ 各层级）
+debug.log
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# 测试覆盖率产物
+coverage
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 环境变量（含真实密钥，严禁入库）
+.env
+.env.local
+.env.*.local
+# .env.example 是示例文件，需要提交
+!.env.example

@@ -1,0 +1,828 @@
+.workspace {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top, rgba(147, 197, 253, 0.16), transparent 30%),
+    #f3f6fb;
+}
+
+.stop-icon {
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.chat-layout {
+  --composer-safe-space: 180px;
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  position: relative;
+  gap: 16px;
+  /* 默认档（≤1100px）：48px；上面各 @media 按屏幕宽度逐级加大，保持大屏留白多、小屏留白少 */
+  padding: 18px 48px 16px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ---- chat-layout 响应式分段：屏越宽，左右 padding 越大 ----
+ * 命中档位速查（与 composer-shell margin 档位值完全一一对应）：
+ *   <1100       → BASE档  padding: 48px
+ *   1100~1279   → SM档    padding: 80px
+ *   1280~1439   → MD档    padding: 120px   ← 1366×768 典型办公屏命中此档
+ *   1440~1679   → LG档    padding: 160px   ← 1440p / MacBook Pro 16"
+ *   1680~1919   → XL档    padding: 200px
+ *   ≥1920       → 2XL档   padding: 240px
+ *   ≤900        → MOB档   padding: 16px（见下方 @media (max-width:900px)）
+ */
+@media (min-width: 1100px) /* SM档: padding 80px */ {
+  .chat-layout {
+    padding-left: 80px;
+    padding-right: 80px;
+  }
+}
+
+@media (min-width: 1280px) /* MD档: padding 120px — 1366x768 默认命中 */ {
+  .chat-layout {
+    padding-left: 120px;
+    padding-right: 120px;
+  }
+}
+
+@media (min-width: 1440px) /* LG档: padding 160px */ {
+  .chat-layout {
+    padding-left: 160px;
+    padding-right: 160px;
+  }
+}
+
+@media (min-width: 1680px) /* XL档: padding 200px */ {
+  .chat-layout {
+    padding-left: 200px;
+    padding-right: 200px;
+  }
+}
+
+@media (min-width: 1920px) /* 2XL档: padding 240px */ {
+  .chat-layout {
+    padding-left: 240px;
+    padding-right: 240px;
+  }
+}
+
+.file-preview-panel {
+  width: min(460px, 42vw);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.file-preview-header {
+  height: 44px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.file-preview-name {
+  font-size: 0.88rem;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-preview-close {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: #ffffff;
+  color: #475569;
+}
+
+.file-preview-object {
+  width: 100%;
+  height: calc(100vh - 220px);
+  border: none;
+  background: #ffffff;
+}
+
+.messages-panel {
+  /* ① 内容区 660px 封顶；② 不超过父容器可用宽
+   * 注意：messages-panel 与 composer-shell-inner 在同一 workspace 坐标系下对齐，
+   *       composer-shell-inner 的 860px 始终比 messages-panel 的 660px 大，
+   *       保证内容区绝不超过输入框外框宽度（大屏 1920 也成立）。
+   */
+  width: min(660px, 100%);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+  overflow: visible;
+  padding: 14px 10px 6px;
+}
+
+.messages-loading {
+  width: 100%;
+  min-height: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 16px;
+  padding: 26px 22px;
+}
+
+.skeleton-row {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.skeleton-row.user {
+  justify-content: flex-end;
+}
+
+.skeleton-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  background: linear-gradient(120deg, rgba(219, 234, 254, 0.95), rgba(191, 219, 254, 0.7), rgba(219, 234, 254, 0.95));
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1.15s ease-in-out infinite;
+}
+
+.skeleton-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 24px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.skeleton-bubble.assistant {
+  width: min(62%, 620px);
+  border-top-left-radius: 8px;
+}
+
+.skeleton-bubble.user {
+  width: min(52%, 520px);
+  border-top-right-radius: 8px;
+}
+
+.skeleton-line {
+  display: block;
+  height: 13px;
+  border-radius: 999px;
+  background: linear-gradient(120deg, rgba(203, 213, 225, 0.78), rgba(226, 232, 240, 0.96), rgba(203, 213, 225, 0.78));
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1.15s ease-in-out infinite;
+}
+
+.skeleton-line.w-86 {
+  width: 86%;
+}
+
+.skeleton-line.w-70 {
+  width: 70%;
+}
+
+.skeleton-line.w-62 {
+  width: 62%;
+}
+
+.skeleton-line.w-52 {
+  width: 52%;
+}
+
+.skeleton-line.w-48 {
+  width: 48%;
+}
+
+.skeleton-line.w-40 {
+  width: 40%;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+/*
+ * 在消息流末尾增加安全占位，避免 fixed 输入框遮挡最后一条消息。
+ * 这个占位跟随消息内容一起参与滚动，比给外层 padding-bottom 更稳定。
+ */
+.messages-panel::after {
+  content: '';
+  display: block;
+  height: var(--composer-safe-space);
+  flex-shrink: 0;
+}
+
+.message-row {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.message-row.assistant {
+  justify-content: flex-start;
+}
+
+.message-row.user {
+  justify-content: flex-end;
+}
+
+/* 消息闪烁提示：不明显的淡入淡出，锚点跳转时用（应用于用户气泡） */
+@keyframes rowFlash {
+  0%,
+  100% {
+    background: rgba(219, 234, 254, 0.7);
+  }
+  25% {
+    background: rgba(191, 219, 254, 0.55);
+  }
+  75% {
+    background: rgba(191, 219, 254, 0.9);
+  }
+}
+
+.row-flash {
+  animation: rowFlash 1.2s ease-in-out 1;
+}
+
+/* ---------- 右侧对话定位锚点：fixed 固定在视口右侧，不随内容滚动 ---------- */
+/* 默认：只显示竖排的 span.anchor-bar（线+文字容器 padding 固定，线位置不动） */
+/* hover 整个面板：淡入卡片背景 + 展开 .anchor-label 文字；尺寸/定位始终不变，只动透明度和 max-width */
+.chat-anchors {
+  position: fixed;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 16px;
+  z-index: 20;
+  /* padding 固定：无论 hover 与否，bar 的右侧边缘位置不变 */
+  padding: 14px 8px;
+  /* 默认窄：仅 bar 宽度 + 小 padding，避免占用太宽位置误触 */
+  width: 36px;
+  max-width: 220px;
+  background: transparent;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  box-shadow: none;
+  transition:
+    width 0.25s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+  backdrop-filter: blur(0px);
+  -webkit-backdrop-filter: blur(0px);
+}
+
+.chat-anchors:hover {
+  width: 220px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-color: rgba(148, 163, 184, 0.18);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+}
+
+.anchor-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  cursor: pointer;
+  width: 100%;
+  min-height: 24px;
+}
+
+.anchor-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #94a3b8;
+  text-align: right;
+  /* 默认隐藏：宽度 0 + 透明，pointer-events 关闭避免抢 hover */
+  max-width: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    max-width 0.25s ease,
+    opacity 0.2s ease,
+    color 0.15s ease,
+    font-weight 0.15s ease;
+}
+
+/* 鼠标移入整个面板时，文字展开 */
+.chat-anchors:hover .anchor-label {
+  max-width: 180px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.anchor-bar {
+  flex-shrink: 0;
+  width: 8px;
+  height: 2px;
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 2px;
+  transition: background-color 0.15s ease, height 0.15s ease;
+}
+
+/* hover（单条）：用户自改颜色 + 微调高度 2.5px，保留 */
+.anchor-item.hovered .anchor-label {
+  color: #475569;
+}
+
+.anchor-item.hovered .anchor-bar {
+  background: rgba(148, 163, 184, 0.78);
+  height: 2.5px;
+}
+
+/* active（滚动联动）：颜色 + 尺寸偏移，完全保留用户自改 */
+.anchor-item.active .anchor-label {
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.anchor-item.active .anchor-bar {
+  background: #3b82f6;
+  width: 12px;
+  position: relative;
+  left: 2px;
+  height: 3px;
+}
+
+/* active + hovered 共存：用户注释掉黑色，选回蓝色，完全保留 */
+.anchor-item.active.hovered .anchor-label {
+  /* color: #0f172a; */
+  color: #3b82f6;
+}
+
+.anchor-item.active.hovered .anchor-bar {
+  /* background: #0f172a; */
+  background: #3b82f6;
+}
+
+/* 助手消息：参照 DeepSeek 官网，无卡片背景、无边框、无阴影，全宽展示 */
+.bubble {
+  width: 100%;
+  max-width: 100%;
+  padding: 4px 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.bubble.assistant {
+  max-width: 100%;
+}
+
+/* 用户消息：保留右对齐气泡样式，但更简洁 */
+.bubble.user {
+  width: auto;
+  max-width: min(72%, 680px);
+  padding: 10px 16px;
+  border-radius: 22px;
+  background: rgba(219, 234, 254, 0.7);
+  /* border: 1px solid rgba(147, 197, 253, 0.3); */
+  box-shadow: none;
+  color: #0f172a;
+  /* font-size: 16px; */
+  /* line-height: 24px; */
+}
+
+.bubble-meta {
+  margin-bottom: 8px;
+  color: #64748b;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+
+/* 用户气泡内的图片附件展示：缩略图横排，点击新标签打开原图 */
+.bubble-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.bubble-image-link {
+  display: block;
+  line-height: 0;
+}
+.bubble-image {
+  width: 160px;
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  object-fit: cover;
+  cursor: zoom-in;
+  display: block;
+}
+
+/* 用户气泡内的文件附件卡片：类型标签 + 名称 + 大小，风格对齐 ComposerPanel */
+.bubble-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.bubble-file-card {
+  width: min(220px, 100%);
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 10px;
+  padding: 8px 10px;
+  text-align: left;
+  overflow: hidden;
+}
+.bubble-file-icon {
+  min-width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.bubble-file-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.bubble-file-name {
+  font-size: 0.8rem;
+  color: #0f172a;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  max-width: 140px;
+}
+.bubble-file-size {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+.bubble-text {
+  color: #111827;
+  font-size: 16px;
+  line-height: 24px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.action-btn {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  background: transparent;
+  color: #64748b;
+  font-size: 0.76rem;
+  line-height: 1;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.action-btn:hover {
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(239, 246, 255, 0.8);
+}
+
+/* Markdown 渲染样式：v-html 内容不带 scoped 属性，需用 :deep 穿透 */
+.bubble-text :deep(.markdown-body) {
+  white-space: normal;
+  word-break: break-word;
+  color: #111827;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.bubble-text :deep(.markdown-body) p {
+  margin: 0 0 10px;
+}
+
+.bubble-text :deep(.markdown-body) p:last-child {
+  margin-bottom: 0;
+}
+
+.bubble-text :deep(.markdown-body) ul,
+.bubble-text :deep(.markdown-body) ol {
+  margin: 0 0 10px;
+  padding-left: 1.4em;
+}
+
+.bubble-text :deep(.markdown-body) li {
+  margin: 4px 0;
+}
+
+.bubble-text :deep(.markdown-body) h1,
+.bubble-text :deep(.markdown-body) h2,
+.bubble-text :deep(.markdown-body) h3,
+.bubble-text :deep(.markdown-body) h4 {
+  margin: 16px 0 8px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.bubble-text :deep(.markdown-body) h1 {
+  font-size: 1.3rem;
+}
+
+.bubble-text :deep(.markdown-body) h2 {
+  font-size: 1.18rem;
+}
+
+.bubble-text :deep(.markdown-body) h3 {
+  font-size: 1.06rem;
+}
+
+.bubble-text :deep(.markdown-body) pre {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  background: #f6f8fa;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.bubble-text :deep(.markdown-body) pre code {
+  background: transparent;
+  padding: 0;
+  border: none;
+  font-size: inherit;
+}
+
+.bubble-text :deep(.markdown-body) code.hljs.inline {
+  background: rgba(148, 163, 184, 0.16);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 0.88em;
+}
+
+.bubble-text :deep(.markdown-body) a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.bubble-text :deep(.markdown-body) a:hover {
+  text-decoration: underline;
+}
+
+.bubble-text :deep(.markdown-body) blockquote {
+  margin: 0 0 10px;
+  padding: 4px 12px;
+  border-left: 3px solid rgba(96, 165, 250, 0.4);
+  color: #475569;
+}
+
+.bubble-text :deep(.markdown-body) table {
+  border-collapse: collapse;
+  margin: 0 0 12px;
+  font-size: 0.92rem;
+}
+
+.bubble-text :deep(.markdown-body) th,
+.bubble-text :deep(.markdown-body) td {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  padding: 6px 10px;
+}
+
+.bubble-text :deep(.markdown-body) th {
+  background: rgba(241, 245, 249, 0.8);
+  font-weight: 600;
+}
+
+.bubble-text :deep(.markdown-body) img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.bubble-text :deep(.markdown-body) hr {
+  border: none;
+  border-top: 1px solid rgba(148, 163, 184, 0.3);
+  margin: 12px 0;
+}
+
+/* 流式中纯文本：保持与 markdown-body 视觉一致，但用 pre-wrap 实现逐字换行 */
+.bubble-text :deep(.markdown-body.streaming-plain) {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #111827;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.cursor {
+  display: inline-block;
+  width: 8px;
+  color: #2563eb;
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.chat-composer {
+  width: 100%;
+}
+
+.chat-composer-shell {
+  /* —— 改为 absolute 定位在 .workspace 内部（已扣除 side-bar 宽度）——
+   * 好处：
+   *   1) 与 messages-panel 在同一坐标系下对齐宽度，不会出现 messages 超过输入框的 bug；
+   *   2) 侧边栏折叠时 left/right 随 workspace 一起位移，不会再固定到 viewport 上错位挡滚动条；
+   *   3) right:18px 自动预留滚动条位置（17px 滚动条 + 1px 安全距），不会挡住滚动条拖拽区域。
+   */
+  position: absolute;
+  left: 0;
+  right: 18px; /* 预留滚动条位置（≈ scrollbar width） */
+  bottom: 0;
+  z-index: 12;
+  background: #f3f6fb;
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 8px;
+  box-sizing: border-box;
+  /* 默认档（≤1100px）：与 chat-layout 同步 48px，保证中线对齐 */
+  margin-left: 48px;
+  margin-right: 48px; /* 注意：margin-right 在 right:18px 基础上再内缩，会和滚动条空区叠加，合理 */
+}
+
+/* ---- composer-shell 响应式分段：与 .chat-layout padding 完全一一对应 ----
+ * 命中档位速查（档名、阈值、生效值都与 chat-layout 相同，保证左右边缘严格对齐）：
+ *   <1100       → BASE档  margin: 48px
+ *   1100~1279   → SM档    margin: 80px
+ *   1280~1439   → MD档    margin: 120px   ← 1366×768 办公屏命中此档
+ *   1440~1679   → LG档    margin: 160px
+ *   1680~1919   → XL档    margin: 200px
+ *   ≥1920       → 2XL档   margin: 240px
+ *   ≤900        → MOB档   margin: 0（见下方 @media (max-width:900px)）
+ */
+@media (min-width: 1100px) /* SM档: margin 80px */ {
+  .chat-composer-shell {
+    margin-left: 80px;
+    margin-right: 80px;
+  }
+}
+
+@media (min-width: 1280px) /* MD档: margin 120px — 1366x768 默认命中 */ {
+  .chat-composer-shell {
+    margin-left: 120px;
+    margin-right: 120px;
+  }
+}
+
+@media (min-width: 1440px) /* LG档: margin 160px */ {
+  .chat-composer-shell {
+    margin-left: 160px;
+    margin-right: 160px;
+  }
+}
+
+@media (min-width: 1680px) /* XL档: margin 200px */ {
+  .chat-composer-shell {
+    margin-left: 200px;
+    margin-right: 200px;
+  }
+}
+
+@media (min-width: 1920px) /* 2XL档: margin 240px */ {
+  .chat-composer-shell {
+    margin-left: 240px;
+    margin-right: 240px;
+  }
+}
+
+.chat-composer-shell-inner {
+  /* 与父元素 chat-composer-shell 等宽（100%），让输入框卡片和消息面板在同一坐标系下比较
+   * —— 真正的"输入框宽度上限"由 ComposerPanel.vue 内 .composer-box 控制（min(760px, 100%)）。
+   *    这样 messages-panel 660px 始终 < composer-box 760px，确保内容区不超过输入框。
+   */
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.composer-disclaimer {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #94a3b8;
+}
+
+.continue-button {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  margin-bottom: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #1d4ed8;
+  font-size: 0.86rem;
+  font-weight: 600;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+  z-index: 13;
+}
+
+@media (max-width: 900px) /* MOB档: padding 16px + 隐藏锚点 + composer 全宽无 margin */ {
+  .bubble.user {
+    max-width: 88%;
+  }
+
+  .messages-panel {
+    width: 100%;
+  }
+
+  .chat-layout {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .chat-anchors {
+    display: none;
+  }
+
+  .chat-composer-shell {
+    left: 0;
+    padding: 8px 12px 8px;
+    margin: 0;
+  }
+
+  .chat-composer-shell-inner {
+    width: 100%;
+  }
+
+  .file-preview-panel {
+    display: none;
+  }
+
+  .continue-button {
+    right: 0;
+    margin-bottom: 6px;
+  }
+}
