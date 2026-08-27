@@ -32,9 +32,11 @@
   overflow-x: hidden;
 }
 
-/* 虚拟滚动启用时，外层容器停止滚动，由 DynamicScroller 成为唯一滚动容器 */
+/* 虚拟滚动启用时：外层停止滚动 + 清零 padding，让 .vue-recycle-scroller 撑满页面宽，
+   滚动条才能真正贴到浏览器最右侧 */
 .chat-layout.no-scroll {
   overflow-y: hidden;
+  padding: 0 !important;
 }
 
 /* ---- chat-layout 响应式分段：屏越宽，左右 padding 越大 ----
@@ -47,10 +49,15 @@
  *   ≥1920       → 2XL档   padding: 240px
  *   ≤900        → MOB档   padding: 16px（见下方 @media (max-width:900px)）
  */
+.chat-layout {
+  --workspace-h-padding: 48px;
+}
+
 @media (min-width: 1100px) /* SM档: padding 80px */ {
   .chat-layout {
     padding-left: 80px;
     padding-right: 80px;
+    --workspace-h-padding: 80px;
   }
 }
 
@@ -58,6 +65,7 @@
   .chat-layout {
     padding-left: 120px;
     padding-right: 120px;
+    --workspace-h-padding: 120px;
   }
 }
 
@@ -65,6 +73,7 @@
   .chat-layout {
     padding-left: 160px;
     padding-right: 160px;
+    --workspace-h-padding: 160px;
   }
 }
 
@@ -72,6 +81,7 @@
   .chat-layout {
     padding-left: 200px;
     padding-right: 200px;
+    --workspace-h-padding: 200px;
   }
 }
 
@@ -79,6 +89,7 @@
   .chat-layout {
     padding-left: 240px;
     padding-right: 240px;
+    --workspace-h-padding: 240px;
   }
 }
 
@@ -151,14 +162,30 @@
   width: 100%;
   overflow-y: auto !important;
   overflow-x: hidden;
-  padding: 14px 10px 6px;
+  /* 顶替 chat-layout 被清零的 padding：上下保持 18px/16px，左右 0 让滚动条贴边 */
+  padding: 18px 0 16px;
 }
 
-/* 虚拟模式下消息行居中，保持 660px 最大宽度 */
-.virtual-messages .message-row {
-  width: min(660px, 100%);
-  margin-left: auto;
-  margin-right: auto;
+/* vue-virtual-scroller 自动注入的中间层强制全宽：
+   .vue-recycle-scroller__item-view 是 position:absolute，默认 shrink-to-fit，
+   必须显式给 width:100% 才能撑满滚动容器 */
+.virtual-messages .vue-recycle-scroller__item-wrapper,
+.virtual-messages .vue-recycle-scroller__item-view {
+  width: 100%;
+}
+
+/* 虚拟模式：msg-row-wrap 承担 messages-panel 的角色
+   width 对齐到 chat-layout content-box 宽，padding 跟 messages-panel 一致 */
+.virtual-messages .msg-row-wrap {
+  width: calc(100% - 2 * var(--workspace-h-padding));
+  margin-left: var(--workspace-h-padding);
+  padding: 14px 10px 6px;
+  box-sizing: border-box;
+}
+
+/* 非虚拟模式：messages-panel 已承担 padding，msg-row-wrap 直接填满 */
+.messages-panel .msg-row-wrap {
+  width: 100%;
 }
 
 /* 虚拟滚动底部安全占位（替代 messages-panel::after） */
@@ -308,77 +335,75 @@
   animation: rowFlash 1.2s ease-in-out 1;
 }
 
-/* ---------- 右侧对话定位锚点：fixed 固定在视口右侧，不随内容滚动 ---------- */
-/* 默认：只显示竖排的 span.anchor-bar（线+文字容器 padding 固定，线位置不动） */
-/* hover 整个面板：淡入卡片背景 + 展开 .anchor-label 文字；尺寸/定位始终不变，只动透明度和 max-width */
-.chat-anchors {
+/* ---------- 右侧对话定位锚点 ---------- */
+/* 外层 wrap：固定 300px，hover 绑在这层（固定高度不位移，杜绝闪烁） */
+/* 收起时 overflow-y: hidden 但仍可设 scrollTop 自动定位到 active 锚点 */
+.chat-anchors-wrap {
+  --scroll-nav-page-padding: 24px;
+  --anchor-gap: 10px;
+
   position: fixed;
-  right: 16px;
+  right: var(--scroll-nav-page-padding);
   top: 50%;
+  height: 300px;
+  width: 28px;
   transform: translateY(-50%);
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
   z-index: 20;
-  /* padding 固定：无论 hover 与否，bar 的右侧边缘位置不变 */
-  padding: 10px 6px;
-  /* 默认窄：仅 bar 宽度 + 小 padding，避免占用太宽位置误触 */
-  width: 28px;
-  max-width: 220px;
-  max-height: 60vh;
+  overflow-y: hidden;
+  overflow-x: hidden;
+  background: transparent;
+  border: none;
+  scrollbar-width: none;
+  transition: width 0.25s ease;
+}
+
+.chat-anchors-wrap:hover {
+  width: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+.chat-anchors-wrap::-webkit-scrollbar {
+  width: 4px;
+}
+.chat-anchors-wrap::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 2px;
+}
+.chat-anchors-wrap:hover::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+}
+
+/* 内层 chat-anchors：全量渲染，高度随锚点数量自动变化 */
+.chat-anchors {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--anchor-gap);
+  margin: auto 0;
+  padding: 10px 10px;
+  width: 100%;
   background: transparent;
   border-radius: 14px;
   border: 1px solid transparent;
   box-shadow: none;
   transition:
-    width 0.25s ease,
     background-color 0.2s ease,
     border-color 0.2s ease,
     box-shadow 0.2s ease;
-  backdrop-filter: blur(0px);
-  -webkit-backdrop-filter: blur(0px);
-  overflow-y: hidden;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
+  overflow: visible;
 }
 
-.chat-anchors:hover {
-  width: 200px;
-  overflow-y: auto;
+/* 展开状态样式 */
+.chat-anchors-wrap:hover .chat-anchors {
   background: rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-color: rgba(148, 163, 184, 0.18);
   box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
-  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
-}
-
-.chat-anchors::-webkit-scrollbar {
-  width: 4px;
-}
-.chat-anchors::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 2px;
-}
-.chat-anchors:hover::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.35);
-}
-
-.anchor-count {
-  flex-shrink: 0;
-  font-size: 0.72rem;
-  color: #94a3b8;
-  padding: 0 4px 4px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-  width: 100%;
-  text-align: right;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-.chat-anchors:hover .anchor-count {
-  opacity: 1;
 }
 
 .anchor-item {
@@ -414,7 +439,7 @@
 }
 
 /* 鼠标移入整个面板时，文字展开 */
-.chat-anchors:hover .anchor-label {
+.chat-anchors-wrap:hover .anchor-label {
   max-width: 160px;
   opacity: 1;
   pointer-events: auto;
@@ -853,6 +878,45 @@
   z-index: 13;
 }
 
+/* 回到底部按钮：定位在输入框正上方居中 */
+.scroll-to-bottom-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  margin-bottom: 8px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  z-index: 13;
+  transform: translateX(-50%);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+}
+
+.scroll-to-bottom-btn:hover {
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.15);
+  color: #3b82f6;
+}
+
+.scroll-bottom-fade-enter-active,
+.scroll-bottom-fade-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.scroll-bottom-fade-enter-from,
+.scroll-bottom-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
+}
+
 @media (max-width: 900px) /* MOB档: padding 16px + 隐藏锚点 + composer 全宽无 margin */ {
   .bubble.user {
     max-width: 88%;
@@ -865,6 +929,7 @@
   .chat-layout {
     padding-left: 16px;
     padding-right: 16px;
+    --workspace-h-padding: 16px;
   }
 
   .chat-anchors {

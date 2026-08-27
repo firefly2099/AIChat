@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Top } from '@element-plus/icons-vue'
+import { Top, ArrowDown } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -205,6 +205,11 @@ const AUTO_SCROLL_THRESHOLD = 72
 const shouldAutoScroll = ref(true)
 let autoScrollRafId: number | null = null
 let anchorSyncRafId: number | null = null
+// 锁：点击锚点后阻止 syncActiveAnchorByScroll 覆盖 active
+let suppressAnchorSync = false
+
+// 是否显示"回到底部"按钮：未在底部且有足够内容可滚
+const showScrollToBottom = computed(() => !shouldAutoScroll.value)
 
 // ---- 右侧对话定位锚点 ----
 // active 由滚动位置联动决定（不被 hover 覆盖），hover 独立控制，两种状态可共存
@@ -226,60 +231,105 @@ const userMessageAnchors = computed(() =>
 )
 
 /**
- * 点击锚点跳转到指定消息行，并触发一次不明显的闪烁提示。
- * 虚拟滚动时先 ensure 该行 DOM 已挂载，再定位；否则走原生 scrollIntoView。
+ * 点击锚点跳转到指定消息行，并触发一次闪烁提示。
+ * 虚拟滚动时用 scroller.scrollToItem(index) 定位；否则走原生 scrollIntoView。
  */
 const jumpToMessage = async (msgId: number) => {
-  const waitForEl = () => new Promise<HTMLElement | null>((resolve) => {
-    const tryFind = () => {
-      const el = document.getElementById(`msg-${msgId}`) as HTMLElement | null
-      if (el || !useVirtualScroll.value) {
-        resolve(el)
-        return
-      }
-      setTimeout(tryFind, 30)
-    }
-    tryFind()
-  })
+  const flash = () => {
+    flashingMessageId.value = msgId
+    window.setTimeout(() => {
+      flashingMessageId.value = null
+    }, 1600)
+  }
 
   if (useVirtualScroll.value && scrollerRef.value) {
-    scrollerRef.value.scrollToItem(msgId, { align: 'center', behavior: 'smooth' })
+    // scrollToItem 参数是 index 不是 id
+    const idx = messages.value.findIndex((m) => m.id === msgId)
+    if (idx >= 0) {
+      // 第一遍：粗定位（align:start），让目标 item 进入视口被 ResizeObserver 测量真实高度
+      scrollerRef.value.scrollToItem(idx, { align: 'start' })
+      // 等两帧让 DOM 挂载 + 高度测量完成
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+      // 第二遍：精确对齐到顶端（高度不够时自然停在底部）
+      scrollerRef.value.scrollToItem(idx, { align: 'start', smooth: true })
+    }
+    // 立即设 active，并加锁防止 syncActiveAnchorByScroll 在动画期间覆盖
+    suppressAnchorSync = true
+    activeAnchorId.value = msgId
+    window.setTimeout(() => { suppressAnchorSync = false }, 800)
+    flash()
+    return
   }
 
-  const targetEl = await waitForEl()
-  if (!targetEl && !useVirtualScroll.value) return
+  // 非虚拟模式：原生 scrollIntoView
+  const el = document.getElementById(`msg-${msgId}`)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  suppressAnchorSync = true
+  activeAnchorId.value = msgId
+  window.setTimeout(() => { suppressAnchorSync = false }, 800)
+  flash()
+}
 
-  if (targetEl && !useVirtualScroll.value) {
-    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }
-
-  flashingMessageId.value = msgId
-  window.setTimeout(() => {
-    flashingMessageId.value = null
-  }, 1600)
+/**
+ * 获取虚拟滚动容器 DOM 元素
+ * DynamicScroller 不 expose $el，但 class="virtual-messages" 会透传到 RecycleScroller 根元素
+ */
+const getScrollerEl = (): HTMLElement | null => {
+  const el = (scrollerRef.value as any)?.$el as HTMLElement | undefined
+  if (el) return el
+  return document.querySelector('.virtual-messages')
 }
 
 /**
  * 根据当前滚动位置，计算处于可视区中心的用户消息并同步激活对应锚点
- * 用于页面滚动或鼠标离开锚点区时，让激活态回到真实位置
+ * 虚拟滚动时用 DOM scrollTop + findItemIndex 查找；普通模式遍历 DOM。
  */
 const syncActiveAnchorByScroll = () => {
+  // 点击锚点的跳转动画期间不覆盖 active
+  if (suppressAnchorSync) return
+
+  if (useVirtualScroll.value && scrollerRef.value) {
+    const scrollEl = getScrollerEl()
+    if (!scrollEl) return
+
+    // 用距顶部 30% 处作为参考点（匹配 align:start 的滚动位置）
+    const refOffset = scrollEl.scrollTop + scrollEl.clientHeight * 0.3
+    const refIdx = (scrollerRef.value as any).findItemIndex?.(refOffset)
+    if (typeof refIdx !== 'number' || refIdx < 0) return
+
+    // 从 refIdx 向两侧扫描，找到最近的 user 消息
+    let nearestUser: number | null = null
+    for (let offset = 0; offset < messages.value.length; offset++) {
+      for (const idx of [refIdx - offset, refIdx + offset]) {
+        if (idx >= 0 && idx < messages.value.length && messages.value[idx].role === 'user') {
+          nearestUser = messages.value[idx].id
+          break
+        }
+      }
+      if (nearestUser !== null) break
+    }
+    if (nearestUser !== null) {
+      activeAnchorId.value = nearestUser
+    }
+    return
+  }
+
+  // 非虚拟模式：遍历 DOM 元素找距顶部 30% 处最近的 user 消息
   const container = chatLayoutRef.value
   if (!container) return
 
   const containerRect = container.getBoundingClientRect()
-  const viewportCenter = containerRect.top + containerRect.height / 2
+  const viewportRef = containerRect.top + containerRect.height * 0.3
 
   let closest = { id: null as number | null, distance: Infinity }
   for (const m of messages.value) {
     if (m.role !== 'user') continue
-    // 用 getElementById 而非 querySelector：id 由 Date.now()+Math.random() 生成，
-    // 形如 1787631359052.2263，querySelector 会把 .2263 误判为类名导致 SyntaxError
     const el = document.getElementById(`msg-${m.id}`)
     if (!el) continue
     const r = el.getBoundingClientRect()
     const msgCenter = r.top + r.height / 2
-    const d = Math.abs(msgCenter - viewportCenter)
+    const d = Math.abs(msgCenter - viewportRef)
     if (d < closest.distance) {
       closest = { id: m.id, distance: d }
     }
@@ -287,11 +337,41 @@ const syncActiveAnchorByScroll = () => {
   activeAnchorId.value = closest.id
 }
 
+/**
+ * 收起状态下自动滚动 wrap，让 active 锚点始终在 300px 可视窗口内。
+ * overflow-y: hidden 仍可通过 scrollTop 编程式滚动。
+ */
+const scrollAnchorIntoView = () => {
+  const wrap = document.querySelector('.chat-anchors-wrap') as HTMLElement | null
+  if (!wrap) return
+  // 鼠标正在 hover 时用户自己控制滚动，不干预
+  if (wrap.matches(':hover')) return
+
+  const activeEl = wrap.querySelector('.anchor-item.active') as HTMLElement | null
+  if (!activeEl) return
+
+  const wrapH = wrap.clientHeight
+  const itemTop = activeEl.offsetTop
+  const itemH = activeEl.offsetHeight
+  // 让 active 居中
+  const target = itemTop - (wrapH - itemH) / 2
+  wrap.scrollTop = Math.max(0, Math.min(target, wrap.scrollHeight - wrapH))
+}
+
+watch(activeAnchorId, () => {
+  nextTick(scrollAnchorIntoView)
+})
+
 const getDistanceToBottom = () => {
-  const el = chatLayoutRef.value
-  if (!el) {
-    return 0
+  if (useVirtualScroll.value) {
+    // DynamicScroller 不 expose getScroll()，直接读 DOM
+    const scrollEl = getScrollerEl()
+    if (scrollEl) {
+      return scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight
+    }
   }
+  const el = chatLayoutRef.value
+  if (!el) return 0
   return el.scrollHeight - el.scrollTop - el.clientHeight
 }
 
@@ -309,18 +389,20 @@ const handleChatLayoutScroll = () => {
  * 滚动到底部：虚拟滚动用 scroller.scrollToItem；普通模式用原生 scrollTop。
  * 流式期间每条 chunk 都会触发此函数，所以内部仍然 rAF 合并。
  */
-const scrollChatToBottom = (force = false) => {
+const scrollChatToBottom = async (force = false) => {
   if (!force && !shouldAutoScroll.value) return
 
-  nextTick(() => {
-    if (useVirtualScroll.value && scrollerRef.value && messages.value.length > 0) {
-      const lastId = messages.value[messages.value.length - 1].id
-      scrollerRef.value.scrollToItem(lastId, { align: 'end', behavior: 'auto' })
+  await nextTick()
+  if (useVirtualScroll.value && scrollerRef.value) {
+    // 直接用 DOM 滚到底，绕过 scroller.scrollToItem 的估算误差
+    const el = getScrollerEl()
+    if (el) {
+      el.scrollTop = el.scrollHeight
       return
     }
-    const el = chatLayoutRef.value
-    if (el) el.scrollTop = el.scrollHeight
-  })
+  }
+  const el = chatLayoutRef.value
+  if (el) el.scrollTop = el.scrollHeight
 }
 
 const scheduleScrollToBottom = (force = false) => {
@@ -1296,23 +1378,24 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="workspace">
-    <!-- 右侧对话定位锚点：fixed 固定在视口，不随内容滚动 -->
-    <div v-if="userMessageAnchors.length > 1" class="chat-anchors">
-      <div v-if="userMessageAnchors.length > 5" class="anchor-count">{{ userMessageAnchors.length }} 轮对话</div>
-      <div
-        v-for="anchor in userMessageAnchors"
-        :key="anchor.id"
-        class="anchor-item"
-        :class="{
-          active: activeAnchorId === anchor.id,
-          hovered: hoveredAnchorId === anchor.id,
-        }"
-        @mouseenter="() => (hoveredAnchorId = anchor.id)"
-        @mouseleave="() => (hoveredAnchorId = null)"
-        @click="jumpToMessage(anchor.id)"
-      >
-        <span class="anchor-label">{{ anchor.preview }}</span>
-        <span class="anchor-bar"></span>
+    <!-- 右侧对话定位锚点：外层 wrap 固定 300px 可滚动，内层 chat-anchors 自适应高度居中 -->
+    <div v-if="userMessageAnchors.length > 1" class="chat-anchors-wrap">
+      <div class="chat-anchors">
+        <div
+          v-for="anchor in userMessageAnchors"
+          :key="anchor.id"
+          class="anchor-item"
+          :class="{
+            active: activeAnchorId === anchor.id,
+            hovered: hoveredAnchorId === anchor.id,
+          }"
+          @mouseenter="() => (hoveredAnchorId = anchor.id)"
+          @mouseleave="() => (hoveredAnchorId = null)"
+          @click="jumpToMessage(anchor.id)"
+        >
+          <span class="anchor-label">{{ anchor.preview }}</span>
+          <span class="anchor-bar"></span>
+        </div>
       </div>
     </div>
 
@@ -1355,9 +1438,12 @@ onBeforeUnmount(() => {
         <div
           v-for="message in messages"
           :key="message.id"
-          :id="`msg-${message.id}`"
-          :class="['message-row', message.role]"
+          class="msg-row-wrap"
         >
+          <div
+            :id="`msg-${message.id}`"
+            :class="['message-row', message.role]"
+          >
           <div
             :class="[
               'bubble',
@@ -1420,6 +1506,7 @@ onBeforeUnmount(() => {
               </button>
             </div>
           </div>
+          </div>
         </div>
       </div>
 
@@ -1440,6 +1527,7 @@ onBeforeUnmount(() => {
             :active="active"
             :data-index="index"
           >
+            <div class="msg-row-wrap">
             <div
               :id="`msg-${item.id}`"
               :class="['message-row', item.role]"
@@ -1507,6 +1595,7 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </div>
+            </div>
           </DynamicScrollerItem>
         </template>
       </DynamicScroller>
@@ -1530,6 +1619,12 @@ onBeforeUnmount(() => {
     <div class="chat-composer-shell">
       <!-- 继续生成按钮：定位在输入框壳体右上方，不被输入框挡住 -->
       <button v-if="showContinueButton" class="continue-button" @click="continueGeneration">继续生成</button>
+      <!-- 回到底部按钮：页面不在底部时显示，定位在输入框正上方居中 -->
+      <Transition name="scroll-bottom-fade">
+        <button v-if="showScrollToBottom" class="scroll-to-bottom-btn" @click="scrollChatToBottom(true)">
+          <el-icon><ArrowDown /></el-icon>
+        </button>
+      </Transition>
       <div ref="chatComposerShellInnerRef" class="chat-composer-shell-inner">
         <ComposerPanel
           ref="chatComposerRef"
