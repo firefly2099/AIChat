@@ -1318,8 +1318,9 @@ onBeforeUnmount(() => {
 
     <!-- 有 sessionID 即进入对话视图；历史消息加载中显示 loading -->
     <section ref="chatLayoutRef" class="chat-layout" :class="{ 'no-scroll': useVirtualScroll }" :style="chatLayoutStyle" @scroll="handleChatLayoutScroll">
-      <div class="messages-panel" :class="{ 'virtual-mode': useVirtualScroll }">
-        <div v-if="isSessionLoading" class="messages-loading" aria-label="历史对话加载中">
+      <!-- 加载中 -->
+      <div v-if="isSessionLoading" class="messages-panel">
+        <div class="messages-loading" aria-label="历史对话加载中">
           <div class="skeleton-row user">
             <div class="skeleton-bubble user">
               <span class="skeleton-line w-52" />
@@ -1347,40 +1348,127 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </div>
-        <template v-else>
-          <!-- 消息少（≤20条）：直接渲染全部 DOM，开销很小，不用虚拟化 -->
-          <template v-if="!useVirtualScroll">
+      </div>
+
+      <!-- 非虚拟模式（≤20条）：messages-panel 做容器，chat-layout 滚动 -->
+      <div v-else-if="!useVirtualScroll" class="messages-panel">
+        <div
+          v-for="message in messages"
+          :key="message.id"
+          :id="`msg-${message.id}`"
+          :class="['message-row', message.role]"
+        >
+          <div
+            :class="[
+              'bubble',
+              message.role,
+              { 'row-flash': message.role === 'user' && flashingMessageId === message.id },
+            ]"
+          >
+            <div v-if="message.role === 'assistant'" class="bubble-meta">
+              {{ isStreaming && lastMessageId === message.id ? '正在生成…' : 'DeepSeek' }}
+            </div>
+            <div class="bubble-text">
+              <div
+                v-if="message.role === 'assistant' && isStreaming && lastMessageId === message.id"
+                class="markdown-body streaming-plain"
+              >
+                {{ message.content }}<span class="cursor">|</span>
+              </div>
+              <div
+                v-else-if="message.role === 'assistant'"
+                class="markdown-body"
+                v-html="renderMarkdown(message.content)"
+              ></div>
+              <template v-else>
+                <div v-if="message.files?.length" class="bubble-files">
+                  <div v-for="(file, idx) in message.files" :key="idx" class="bubble-file-card">
+                    <span class="bubble-file-icon">{{ getFileTypeTag(file.name) }}</span>
+                    <span class="bubble-file-meta">
+                      <span class="bubble-file-name">{{ file.name }}</span>
+                      <span class="bubble-file-size">{{ formatAttachmentSize(file.size) }}</span>
+                    </span>
+                  </div>
+                </div>
+                <div v-if="message.attachments?.length" class="bubble-images">
+                  <a
+                    v-for="(att, idx) in message.attachments"
+                    :key="idx"
+                    :href="att.url"
+                    target="_blank"
+                    rel="noreferrer"
+                    class="bubble-image-link"
+                    @click.prevent="bubbleImagePreviewUrl = att.url"
+                  >
+                    <img :src="att.url" class="bubble-image" alt="附件图片" />
+                  </a>
+                </div>
+                {{ message.content }}
+              </template>
+            </div>
+            <div v-if="message.role === 'assistant' && !isStreaming" class="message-actions">
+              <button type="button" class="action-btn" @click="copyMessage(message)">
+                {{ copiedMessageId === message.id ? '已复制' : '复制' }}
+              </button>
+              <button
+                v-if="lastMessageId === message.id && hasConversation"
+                type="button"
+                class="action-btn"
+                @click="regenerateLast"
+              >
+                重新生成
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 虚拟模式（>20条）：DynamicScroller 直接当 chat-layout 子元素，全宽撑满，滚动条自然贴右 -->
+      <DynamicScroller
+        v-else
+        ref="scrollerRef"
+        :items="messages"
+        :key-field="'id'"
+        :direction="'vertical'"
+        :min-item-size="120"
+        class="virtual-messages"
+        @scroll="handleChatLayoutScroll"
+      >
+        <template #default="{ item, index, active }">
+          <DynamicScrollerItem
+            :item="item"
+            :active="active"
+            :data-index="index"
+          >
             <div
-              v-for="message in messages"
-              :key="message.id"
-              :id="`msg-${message.id}`"
-              :class="['message-row', message.role]"
+              :id="`msg-${item.id}`"
+              :class="['message-row', item.role]"
             >
               <div
                 :class="[
                   'bubble',
-                  message.role,
-                  { 'row-flash': message.role === 'user' && flashingMessageId === message.id },
+                  item.role,
+                  { 'row-flash': item.role === 'user' && flashingMessageId === item.id },
                 ]"
               >
-                <div v-if="message.role === 'assistant'" class="bubble-meta">
-                  {{ isStreaming && lastMessageId === message.id ? '正在生成…' : 'DeepSeek' }}
+                <div v-if="item.role === 'assistant'" class="bubble-meta">
+                  {{ isStreaming && lastMessageId === item.id ? '正在生成…' : 'DeepSeek' }}
                 </div>
                 <div class="bubble-text">
                   <div
-                    v-if="message.role === 'assistant' && isStreaming && lastMessageId === message.id"
+                    v-if="item.role === 'assistant' && isStreaming && lastMessageId === item.id"
                     class="markdown-body streaming-plain"
                   >
-                    {{ message.content }}<span class="cursor">|</span>
+                    {{ item.content }}<span class="cursor">|</span>
                   </div>
                   <div
-                    v-else-if="message.role === 'assistant'"
+                    v-else-if="item.role === 'assistant'"
                     class="markdown-body"
-                    v-html="renderMarkdown(message.content)"
+                    v-html="renderMarkdown(item.content)"
                   ></div>
                   <template v-else>
-                    <div v-if="message.files?.length" class="bubble-files">
-                      <div v-for="(file, idx) in message.files" :key="idx" class="bubble-file-card">
+                    <div v-if="item.files?.length" class="bubble-files">
+                      <div v-for="(file, idx) in item.files" :key="idx" class="bubble-file-card">
                         <span class="bubble-file-icon">{{ getFileTypeTag(file.name) }}</span>
                         <span class="bubble-file-meta">
                           <span class="bubble-file-name">{{ file.name }}</span>
@@ -1388,9 +1476,9 @@ onBeforeUnmount(() => {
                         </span>
                       </div>
                     </div>
-                    <div v-if="message.attachments?.length" class="bubble-images">
+                    <div v-if="item.attachments?.length" class="bubble-images">
                       <a
-                        v-for="(att, idx) in message.attachments"
+                        v-for="(att, idx) in item.attachments"
                         :key="idx"
                         :href="att.url"
                         target="_blank"
@@ -1401,15 +1489,15 @@ onBeforeUnmount(() => {
                         <img :src="att.url" class="bubble-image" alt="附件图片" />
                       </a>
                     </div>
-                    {{ message.content }}
+                    {{ item.content }}
                   </template>
                 </div>
-                <div v-if="message.role === 'assistant' && !isStreaming" class="message-actions">
-                  <button type="button" class="action-btn" @click="copyMessage(message)">
-                    {{ copiedMessageId === message.id ? '已复制' : '复制' }}
+                <div v-if="item.role === 'assistant' && !isStreaming" class="message-actions">
+                  <button type="button" class="action-btn" @click="copyMessage(item)">
+                    {{ copiedMessageId === item.id ? '已复制' : '复制' }}
                   </button>
                   <button
-                    v-if="lastMessageId === message.id && hasConversation"
+                    v-if="lastMessageId === item.id && hasConversation"
                     type="button"
                     class="action-btn"
                     @click="regenerateLast"
@@ -1419,97 +1507,9 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </div>
-          </template>
-
-          <!-- 消息多（>20条）：动态高度虚拟滚动，只渲染视口内的消息 DOM -->
-          <DynamicScroller
-            v-else
-            ref="scrollerRef"
-            :items="messages"
-            :key-field="'id'"
-            :direction="'vertical'"
-            :min-item-size="120"
-            class="virtual-messages"
-            @scroll="handleChatLayoutScroll"
-          >
-            <template #default="{ item, index, active }">
-              <DynamicScrollerItem
-                :item="item"
-                :active="active"
-                :data-index="index"
-              >
-                <div
-                  :id="`msg-${item.id}`"
-                  :class="['message-row', item.role]"
-                >
-                  <div
-                    :class="[
-                      'bubble',
-                      item.role,
-                      { 'row-flash': item.role === 'user' && flashingMessageId === item.id },
-                    ]"
-                  >
-                    <div v-if="item.role === 'assistant'" class="bubble-meta">
-                      {{ isStreaming && lastMessageId === item.id ? '正在生成…' : 'DeepSeek' }}
-                    </div>
-                    <div class="bubble-text">
-                      <div
-                        v-if="item.role === 'assistant' && isStreaming && lastMessageId === item.id"
-                        class="markdown-body streaming-plain"
-                      >
-                        {{ item.content }}<span class="cursor">|</span>
-                      </div>
-                      <div
-                        v-else-if="item.role === 'assistant'"
-                        class="markdown-body"
-                        v-html="renderMarkdown(item.content)"
-                      ></div>
-                      <template v-else>
-                        <div v-if="item.files?.length" class="bubble-files">
-                          <div v-for="(file, idx) in item.files" :key="idx" class="bubble-file-card">
-                            <span class="bubble-file-icon">{{ getFileTypeTag(file.name) }}</span>
-                            <span class="bubble-file-meta">
-                              <span class="bubble-file-name">{{ file.name }}</span>
-                              <span class="bubble-file-size">{{ formatAttachmentSize(file.size) }}</span>
-                            </span>
-                          </div>
-                        </div>
-                        <div v-if="item.attachments?.length" class="bubble-images">
-                          <a
-                            v-for="(att, idx) in item.attachments"
-                            :key="idx"
-                            :href="att.url"
-                            target="_blank"
-                            rel="noreferrer"
-                            class="bubble-image-link"
-                            @click.prevent="bubbleImagePreviewUrl = att.url"
-                          >
-                            <img :src="att.url" class="bubble-image" alt="附件图片" />
-                          </a>
-                        </div>
-                        {{ item.content }}
-                      </template>
-                    </div>
-                    <div v-if="item.role === 'assistant' && !isStreaming" class="message-actions">
-                      <button type="button" class="action-btn" @click="copyMessage(item)">
-                        {{ copiedMessageId === item.id ? '已复制' : '复制' }}
-                      </button>
-                      <button
-                        v-if="lastMessageId === item.id && hasConversation"
-                        type="button"
-                        class="action-btn"
-                        @click="regenerateLast"
-                      >
-                        重新生成
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </DynamicScrollerItem>
-            </template>
-          </DynamicScroller>
+          </DynamicScrollerItem>
         </template>
-      </div>
+      </DynamicScroller>
 
       <aside v-if="previewAttachment && isFileAttachment && showFilePreview" class="file-preview-panel">
         <div class="file-preview-header">
