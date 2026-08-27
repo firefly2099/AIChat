@@ -1298,6 +1298,7 @@ onBeforeUnmount(() => {
   <main class="workspace">
     <!-- 右侧对话定位锚点：fixed 固定在视口，不随内容滚动 -->
     <div v-if="userMessageAnchors.length > 1" class="chat-anchors">
+      <div v-if="userMessageAnchors.length > 5" class="anchor-count">{{ userMessageAnchors.length }} 轮对话</div>
       <div
         v-for="anchor in userMessageAnchors"
         :key="anchor.id"
@@ -1316,7 +1317,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 有 sessionID 即进入对话视图；历史消息加载中显示 loading -->
-    <section ref="chatLayoutRef" class="chat-layout" :style="chatLayoutStyle" @scroll="handleChatLayoutScroll">
+    <section ref="chatLayoutRef" class="chat-layout" :class="{ 'no-scroll': useVirtualScroll }" :style="chatLayoutStyle" @scroll="handleChatLayoutScroll">
       <div class="messages-panel">
         <div v-if="isSessionLoading" class="messages-loading" aria-label="历史对话加载中">
           <div class="skeleton-row user">
@@ -1429,6 +1430,7 @@ onBeforeUnmount(() => {
             :direction="'vertical'"
             :min-item-size="120"
             class="virtual-messages"
+            @scroll="handleChatLayoutScroll"
           >
             <template #default="{ item, index, active }">
               <DynamicScrollerItem

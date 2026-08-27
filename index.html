@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- 内容安全策略：默认同源；图片放行 data:/blob:/https:；样式放行内联（Vue scoped 注入）；脚本严格同源；连接放行 ws（Vite HMR） -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss: https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'" />
+    <!-- 内容安全策略：默认同源；图片放行 data:/blob:/https:；样式放行内联（Vue scoped 注入）；脚本严格同源；连接放行 ws（Vite HMR）+ localhost（开发态直连后端） -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss: https: http://localhost:* http://127.0.0.1:*; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <title>元启 AI 助手</title>
   </head>
   <body>
