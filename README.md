@@ -2,9 +2,7 @@
 
 # 元启 AI 聊天项目
 
-**在线演示**: https://aichat.firefly2099.vercel.app
-
-后端 API: https://aichat-production-2004.up.railway.app
+**在线演示**: <https://aichat.firefly2099.vercel.app>
 
 这是一个基于 Vue 3 + TypeScript + Vite 的 AI 聊天应用，界面参考 DeepSeek 风格，当前版本 1.0.0，支持：
 
@@ -15,7 +13,7 @@
 - Element Plus 图标和基础组件样式
 - 真正的服务端代理模型请求（仅 DeepSeek）
 - 文件上传并提取文本（txt / md / csv / json / 代码 / pdf / docx / xlsx / pptx）
-- 图片上传：走 DeepSeek Files API（base64 → file_id → 视觉模型）
+- 图片上传：走 DeepSeek Files API（base64 → file\_id → 视觉模型）
 - 附件展示：聊天气泡内展示图片与文件卡片，刷新后由 localStorage 按下标合并回消息
 - 锚点定位、深度思考与搜索开关、Markdown 渲染与代码高亮
 - API Key 保护与 IP 限流
@@ -41,9 +39,9 @@
 - src/components/SidebarNav.vue：左侧会话导航
 - src/components/ComposerPanel.vue：输入与上传面板
 - src/components/ImagePreviewModal.vue：图片预览弹窗
-- src/views/HomeView.vue：首页
-- src/views/ChatView.vue：聊天页
-- src/views/ChatView.css：聊天页 scoped 样式
+- src/views/HomeView\.vue：首页
+- src/views/ChatView\.vue：聊天页
+- src/views/ChatView\.css：聊天页 scoped 样式
 - src/store/sessionStore.ts：会话状态管理
 - src/store/modelStore.ts：模型状态管理
 - src/api/chatApi.ts：统一接口层（自动携带 token）
@@ -78,23 +76,20 @@
 
 1. 安装依赖
    npm install
-
 2. 配置环境变量
-   复制 .env.example 为 .env，并填充 DEEPSEEK_API_KEY
-   同时配置 MySQL 连接：MYSQL_HOST / MYSQL_PORT / MYSQL_USER / MYSQL_PASSWORD / MYSQL_DATABASE
-
+   复制 .env.example 为 .env，并填充 DEEPSEEK\_API\_KEY
+   同时配置 MySQL 连接：MYSQL\_HOST / MYSQL\_PORT / MYSQL\_USER / MYSQL\_PASSWORD / MYSQL\_DATABASE
 3. 启动开发环境
    npm run dev
-
 4. 访问应用
-   前端：http://localhost:5173
-   后端：http://localhost:3001
+   前端：<http://localhost:5173>
+   后端：<http://localhost:3001>
 
 ## 主要功能
 
 - 首页路由：/
 - 会话页路由：/chat/:sessionID
-- 点击品牌或“开启新对话”创建新会话
+- 点击 Logo 或“开启新对话”创建新会话
 - 点击历史会话恢复对应对话
 - 侧边栏可展开/收起，支持会话置顶、重命名、批量删除
 - 会话数据保存在内存中，切换路由不丢失

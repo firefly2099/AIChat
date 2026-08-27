@@ -2,9 +2,7 @@
 
 # Yuanqi AI Chat Project
 
-**Live Demo**: https://aichat.firefly2099.vercel.app
-
-Backend API: https://aichat-production-2004.up.railway.app
+**Live Demo**: <https://aichat.firefly2099.vercel.app>
 
 An AI chat application built with Vue 3 + TypeScript + Vite, with a UI inspired by DeepSeek. Current version 1.0.0. Features:
 
@@ -15,7 +13,7 @@ An AI chat application built with Vue 3 + TypeScript + Vite, with a UI inspired 
 - Element Plus icons and base component styling
 - Real server-side proxy for model requests (DeepSeek only)
 - File upload with text extraction (txt / md / csv / json / code / pdf / docx / xlsx / pptx)
-- Image upload via the DeepSeek Files API (base64 → file_id → vision model)
+- Image upload via the DeepSeek Files API (base64 → file\_id → vision model)
 - Attachment rendering: image and file cards inside chat bubbles; after refresh, attachments are merged back into messages by index using localStorage
 - Anchor navigation, deep-thinking and web-search toggles, Markdown rendering with code highlighting
 - API key protection and IP rate limiting
@@ -41,9 +39,9 @@ An AI chat application built with Vue 3 + TypeScript + Vite, with a UI inspired 
 - src/components/SidebarNav.vue: left conversation navigation
 - src/components/ComposerPanel.vue: input and upload panel
 - src/components/ImagePreviewModal.vue: image preview modal
-- src/views/HomeView.vue: home page
-- src/views/ChatView.vue: chat page
-- src/views/ChatView.css: scoped styles for the chat page
+- src/views/HomeView\.vue: home page
+- src/views/ChatView\.vue: chat page
+- src/views/ChatView\.css: scoped styles for the chat page
 - src/store/sessionStore.ts: conversation state management
 - src/store/modelStore.ts: model state management
 - src/api/chatApi.ts: unified API layer (auto-attaches token)
@@ -78,23 +76,20 @@ An AI chat application built with Vue 3 + TypeScript + Vite, with a UI inspired 
 
 1. Install dependencies
    npm install
-
 2. Configure environment variables
-   Copy .env.example to .env and fill in DEEPSEEK_API_KEY
-   Also configure the MySQL connection: MYSQL_HOST / MYSQL_PORT / MYSQL_USER / MYSQL_PASSWORD / MYSQL_DATABASE
-
+   Copy .env.example to .env and fill in DEEPSEEK\_API\_KEY
+   Also configure the MySQL connection: MYSQL\_HOST / MYSQL\_PORT / MYSQL\_USER / MYSQL\_PASSWORD / MYSQL\_DATABASE
 3. Start the development environment
    npm run dev
-
 4. Open the app
-   Frontend: http://localhost:5173
-   Backend: http://localhost:3001
+   Frontend: <http://localhost:5173>
+   Backend: <http://localhost:3001>
 
 ## Main Features
 
 - Home route: /
 - Conversation route: /chat/:sessionID
-- Click the brand or "Start a new conversation" to create a new conversation
+- Click the Logo or "Start a new conversation" to create a new conversation
 - Click a history entry to resume the corresponding conversation
 - The sidebar can be expanded/collapsed and supports pin, rename, and batch delete
 - Conversation data is held in memory so it survives route changes
