@@ -2,6 +2,10 @@
 
 # 元启 AI 聊天项目
 
+**在线演示**: https://aichat.firefly2099.vercel.app
+
+后端 API: https://aichat-production-2004.up.railway.app
+
 这是一个基于 Vue 3 + TypeScript + Vite 的 AI 聊天应用，界面参考 DeepSeek 风格，当前版本 1.0.0，支持：
 
 - 左侧历史会话侧边栏（置顶 / 重命名 / 批量删除）

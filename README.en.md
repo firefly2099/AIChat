@@ -2,6 +2,10 @@
 
 # Yuanqi AI Chat Project
 
+**Live Demo**: https://aichat.firefly2099.vercel.app
+
+Backend API: https://aichat-production-2004.up.railway.app
+
 An AI chat application built with Vue 3 + TypeScript + Vite, with a UI inspired by DeepSeek. Current version 1.0.0. Features:
 
 - Left sidebar with conversation history (pin / rename / batch delete)
