@@ -138,6 +138,15 @@
   padding: 14px 10px 6px;
 }
 
+/* 虚拟滚动容器：让 DynamicScroller 占满 messages-panel 的高度 */
+.virtual-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  width: 100%;
+}
+
 .messages-loading {
   width: 100%;
   min-height: 380px;
