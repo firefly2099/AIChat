@@ -17,8 +17,10 @@ import {
  * 返回的内容使用 text/event-stream，允许前端逐字追加渲染。
  */
 async function streamChat(req, res) {
+  const t0 = performance.now()
   const token = getTokenFromRequest(req)
   const userId = await getUserIdByToken(token)
+  const t1 = performance.now()
   if (!token || !userId) {
     res.status(401)
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
@@ -42,6 +44,7 @@ async function streamChat(req, res) {
   res.setHeader('Cache-Control', 'no-cache, no-transform')
   res.setHeader('Connection', 'keep-alive')
   res.setHeader('X-Accel-Buffering', 'no')
+  res.flushHeaders?.()
 
   if (!provider.key) {
     res.write(`data: ${JSON.stringify({ type: 'error', text: '服务暂未配置模型密钥，请联系管理员。' })}\n\n`)
@@ -110,6 +113,8 @@ async function streamChat(req, res) {
     })
 
     clearTimeout(upstreamTimeout)
+    const t2 = performance.now()
+    console.log(`[streamChat] token验证=${(t1 - t0).toFixed(0)}ms, 上游TTFB=${(t2 - t1).toFixed(0)}ms, model=${requestModel}`)
 
     if (!response.ok) {
       const rawBody = await response.text()

@@ -17,7 +17,15 @@ const dbPool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   charset: 'utf8mb4',
+  connectTimeout: 10_000,
+  acquireTimeout: 10_000,
+  timeout: 30_000,
 })
+
+// token → userId 内存缓存，避免每个请求都走 MySQL。
+// token 是设备指纹，几乎不变；TTL 10 分钟。
+const tokenCache = new Map()
+const TOKEN_CACHE_TTL = 10 * 60 * 1000
 
 /**
  * 初始化数据库表结构（users / chat_sessions / chat_messages），
@@ -118,9 +126,18 @@ async function getUserIdByToken(token) {
     return null
   }
 
+  const cached = tokenCache.get(normalized)
+  if (cached && Date.now() - cached.t < TOKEN_CACHE_TTL) {
+    return cached.id
+  }
+
   const [rows] = await dbPool.query('SELECT id FROM users WHERE token = ? LIMIT 1', [normalized])
   const row = Array.isArray(rows) ? rows[0] : null
-  return row?.id ? Number(row.id) : null
+  const id = row?.id ? Number(row.id) : null
+  if (id) {
+    tokenCache.set(normalized, { id, t: Date.now() })
+  }
+  return id
 }
 
 /**
