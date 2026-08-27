@@ -1318,7 +1318,7 @@ onBeforeUnmount(() => {
 
     <!-- 有 sessionID 即进入对话视图；历史消息加载中显示 loading -->
     <section ref="chatLayoutRef" class="chat-layout" :class="{ 'no-scroll': useVirtualScroll }" :style="chatLayoutStyle" @scroll="handleChatLayoutScroll">
-      <div class="messages-panel">
+      <div class="messages-panel" :class="{ 'virtual-mode': useVirtualScroll }">
         <div v-if="isSessionLoading" class="messages-loading" aria-label="历史对话加载中">
           <div class="skeleton-row user">
             <div class="skeleton-bubble user">
@@ -1436,7 +1436,6 @@ onBeforeUnmount(() => {
               <DynamicScrollerItem
                 :item="item"
                 :active="active"
-                :size-dependencies="[item.content, item.files?.length, item.attachments?.length]"
                 :data-index="index"
               >
                 <div

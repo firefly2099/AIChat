@@ -143,6 +143,13 @@
   padding: 14px 10px 6px;
 }
 
+/* 虚拟滚动模式：messages-panel 撑满 chat-layout，让 DynamicScroller 的滚动条贴到页面最右侧 */
+.chat-layout.no-scroll > .messages-panel.virtual-mode {
+  width: 100% !important;
+  max-width: none !important;
+  padding: 14px 0 6px;
+}
+
 /* 虚拟滚动容器：让 DynamicScroller 占满 messages-panel 的高度 */
 .virtual-messages {
   flex: 1;
@@ -263,6 +270,13 @@
   display: flex;
   align-items: flex-start;
   width: 100%;
+}
+
+/* 虚拟模式下，消息行限制 660px 居中，避免全宽过宽 */
+.chat-layout.no-scroll > .messages-panel.virtual-mode .message-row {
+  width: min(660px, 100%);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .message-row.assistant {
