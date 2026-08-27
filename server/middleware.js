@@ -41,7 +41,8 @@ function isOriginAllowed(origin) {
   if (!origin) return false
   if (DEFAULT_LOCAL_ORIGINS.includes(origin)) return true
   if (CORS_ORIGINS.includes(origin)) return true
-  if (/^https:\/\/[-a-z0-9]+\.vercel\.app$/i.test(origin)) return true
+  // Vercel 预览/生产域名（支持多级子域名，如 xxx.vercel.app 或 xxx.yyy.vercel.app）
+  if (/^https:\/\/(?:[-a-z0-9]+\.)*vercel\.app$/i.test(origin)) return true
   return false
 }
 
