@@ -3,13 +3,17 @@ const DEVICE_TOKEN_KEY = 'aichat_device_token'
 
 /**
  * 请求前缀（开发/生产分离）。
- * - 开发：用相对路径 /api，走 Vite dev proxy 到 http://localhost:3001。
+ * - 开发：直连 http://localhost:3001，彻底绕过 Vite dev proxy。
+ *   Vite 的 http-proxy 对 POST + SSE 流式响应不稳定（会缓冲/挂死），
+ *   开发态直连后端是唯一可靠方案。后端 CORS 已放行 localhost。
  * - 生产：用 VITE_API_BASE_URL 绝对路径（部署后端的公网域名），绕过 Vercel 静态站直连后端。
  *   Vercel 不运行 Express + MySQL，因此生产无法走同源相对路径。
  *   后端 CORS 中间件已配置本地白名单 + *.vercel.app 通配，不会被浏览器拦截。
  */
 const API_BASE = (() => {
-  if (import.meta.env.DEV) return ''
+  if (import.meta.env.DEV) {
+    return String(import.meta.env.VITE_DEV_API_BASE || 'http://localhost:3001').replace(/\/$/, '')
+  }
   const base = String(import.meta.env.VITE_API_BASE_URL || '').trim()
   // 去掉末尾斜杠，保证 `/api/...` 拼接后不会出现 "//"
   return base.replace(/\/$/, '')
