@@ -845,6 +845,7 @@ function buildContinuePrompt() {
 async function streamReply(userText: string, options: { reuseLastAssistant?: boolean; isContinue?: boolean; images?: { url: string; mime: string }[] } = {}) {
   if (isStreaming.value) return
 
+  const t0 = performance.now()
   isStreaming.value = true
   isManualStop.value = false
   isPaused.value = false
@@ -888,6 +889,8 @@ async function streamReply(userText: string, options: { reuseLastAssistant?: boo
     })
 
     clearTimeout(streamTimeout)
+    const tFetchResolved = performance.now()
+    console.log(`[streamReply] fetch 响应到达=${(tFetchResolved - t0).toFixed(0)}ms, status=${response.status}`)
 
     if (!response.ok) {
       let errorText = '模型服务暂时不可用，请稍后再试。'
@@ -933,6 +936,9 @@ async function streamReply(userText: string, options: { reuseLastAssistant?: boo
           const payload = JSON.parse(raw)
 
           if (payload.type === 'chunk') {
+            if (!receivedData) {
+              console.log(`[streamReply] 首 chunk 到达=${(performance.now() - t0).toFixed(0)}ms, 后端TTFB~${(performance.now() - tFetchResolved).toFixed(0)}ms`)
+            }
             receivedData = true
             assistantMessage.content += payload.text || ''
             void persistSession()

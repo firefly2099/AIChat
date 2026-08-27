@@ -10,11 +10,18 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
+        ws: true,
         configure: (proxy) => {
           proxy.on('proxyRes', (proxyRes) => {
-            if (proxyRes.headers['content-type']?.includes('text/event-stream')) {
+            const ct = String(proxyRes.headers['content-type'] || '')
+            if (ct.includes('text/event-stream')) {
+              // 移除 Content-Length 强制 chunked，任何代理/浏览器都不能缓冲
+              delete proxyRes.headers['content-length']
+              delete proxyRes.headers['content-encoding']
               proxyRes.headers['x-accel-buffering'] = 'no'
-              proxyRes.headers['cache-control'] = 'no-cache'
+              proxyRes.headers['x-accel-charset'] = 'utf-8'
+              proxyRes.headers['cache-control'] = 'no-cache, no-transform'
+              proxyRes.headers['connection'] = 'keep-alive'
             }
           })
         },
