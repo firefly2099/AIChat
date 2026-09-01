@@ -1066,13 +1066,34 @@ async function streamReply(userText: string, options: { reuseLastAssistant?: boo
     if (error instanceof Error && error.name === 'AbortError') {
       // 超时导致的中断
       assistantMessage.content = assistantMessage.content || '请求超时，请稍后重试。'
+      ElMessage.warning('请求超时，请稍后重试。')
       void persistSession()
       focusInput()
       return
     }
 
-    if (error instanceof Error && error.name !== 'AbortError') {
+    // 网络中断：fetch 抛出 TypeError（Failed to fetch），或浏览器离线
+    const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false
+    if (isOffline || (error instanceof TypeError)) {
+      assistantMessage.content = '网络连接已断开，请检查网络后重试。'
+      ElMessage.error('网络连接已断开，请检查网络后重试。')
+      void persistSession()
+      focusInput()
+      return
+    }
+
+    // 其他错误：后端返回的错误信息（如 Token 超限、模型繁忙）已写入 assistantMessage.content
+    if (error instanceof Error) {
       assistantMessage.content = assistantMessage.content || '抱歉，消息流连接失败，请稍后再试。'
+      const errorText = assistantMessage.content
+      // Token 超限 / 请求频率过快
+      if (/速率|429|Too many|频繁|超限/i.test(errorText)) {
+        ElMessage.warning('请求过于频繁，请稍后再试。')
+      }
+      // 模型繁忙 / 服务不可用
+      else if (/繁忙|503|不可用|故障/i.test(errorText)) {
+        ElMessage.warning('模型服务繁忙，请稍后再试。')
+      }
       void persistSession()
       focusInput()
     }
