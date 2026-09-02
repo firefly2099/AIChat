@@ -798,21 +798,23 @@ const restoreSession = async (id: string) => {
   messages.value = target.messages || []
   // 合并本地附件扩展信息（图片 base64 / 文件元信息 / 提取文本 / R2 URL）：
   // 后端 chat_messages 存了 imageUrls 但不存 attachments/files/fileContext，刷新后靠 localStorage 按下标补回。
-  // 优先用后端 imageUrls 构造 attachments（R2 URL），localStorage base64 作为回退。
+  // 优先级：后端 imageUrls（R2 URL）> localStorage base64 attachments
   const extras = loadMessageExtras(id)
   if (Object.keys(extras).length > 0 || messages.value.some((m) => m.imageUrls?.length)) {
     messages.value = messages.value.map((m, i): Message => {
       const ex = extras[i]
-      // 优先用后端 imageUrls 恢复图片附件
-      if (m.imageUrls?.length && !m.attachments?.length) {
+      // 优先用后端 imageUrls（R2）恢复图片，体积小、跨设备持久
+      if (m.imageUrls?.length) {
         return {
           ...m,
-          attachments: m.imageUrls.map((url) => ({ url, mime: '' })),
+          attachments: m.imageUrls.map((url: string) => ({ url, mime: '' })),
           files: ex?.files,
           fileContext: ex?.fileContext,
+          imageUrls: m.imageUrls,
         } as Message
       }
       if (!ex) return { ...m } as Message
+      // 没有 R2 URL 时回退 localStorage base64（旧图或 R2 未配置时上传的图）
       return { ...m, attachments: ex.attachments, files: ex.files, fileContext: ex.fileContext, imageUrls: ex.imageUrls || m.imageUrls } as Message
     })
   }
