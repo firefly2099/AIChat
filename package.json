@@ -20,6 +20,7 @@
     "@types/ws": "^8.18.1",
     "aws4fetch": "^1.0.20",
     "concurrently": "^10.0.5",
+    "cookie-parser": "^1.4.7",
     "dompurify": "^3.4.14",
     "dotenv": "^17.4.2",
     "element-plus": "^2.14.4",

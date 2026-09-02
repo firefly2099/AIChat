@@ -1,8 +1,17 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
+// vite.config 是 ESM：不再使用 __dirname / node:path，避免 Vite native configLoader 告警。
+const SRC_ROOT = new URL('./src', import.meta.url).pathname
+
 export default defineConfig({
   plugins: [vue()],
+  resolve: {
+    alias: {
+      // 与 tsconfig.app.json paths 保持一致：@ 指向 src 绝对路径
+      '@': SRC_ROOT,
+    },
+  },
   build: {
     rolldownOptions: {
       output: {

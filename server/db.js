@@ -17,9 +17,12 @@ const dbPool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   charset: 'utf8mb4',
+  // 连接建立阶段（TCP + MySQL 握手）总超时。connectionConfig 合法字段，mysql2 3.x 不告警。
   connectTimeout: 10_000,
-  acquireTimeout: 10_000,
-  timeout: 30_000,
+  // 池级字段：空闲连接存活时间，取代旧版 timeout。mysql2 3.23.4 验证为合法池配置。
+  idleTimeout: 30_000,
+  // 最多同时保留的空闲连接数，与 connectionLimit 相同，避免频繁销毁/重建。
+  maxIdle: 10,
 })
 
 // token → userId 内存缓存，避免每个请求都走 MySQL。
@@ -37,12 +40,36 @@ async function ensureTables() {
     CREATE TABLE IF NOT EXISTS users (
       id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
       token VARCHAR(128) NOT NULL,
+      fingerprint VARCHAR(64) NULL DEFAULT NULL COMMENT '浏览器特征指纹（SHA-256 hex），用于清站点数据后恢复身份',
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (id),
-      UNIQUE KEY uniq_users_token (token)
+      UNIQUE KEY uniq_users_token (token),
+      KEY idx_users_fingerprint (fingerprint)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `)
+
+  // 升级已有 users 表：补 fingerprint 列和索引
+  try {
+    const [cols] = await dbPool.query(
+      "SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'fingerprint'",
+    )
+    const colExists = Number(Array.isArray(cols) ? cols[0]?.c : 0) > 0
+    if (!colExists) {
+      await dbPool.query("ALTER TABLE users ADD COLUMN fingerprint VARCHAR(64) NULL DEFAULT NULL COMMENT '浏览器特征指纹（SHA-256 hex），用于清站点数据后恢复身份' AFTER token")
+      console.log('[migration] users: 已新增 fingerprint 列')
+    }
+    const [idxs] = await dbPool.query(
+      "SELECT COUNT(*) AS c FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_users_fingerprint'",
+    )
+    const idxExists = Number(Array.isArray(idxs) ? idxs[0]?.c : 0) > 0
+    if (!idxExists) {
+      await dbPool.query('ALTER TABLE users ADD INDEX idx_users_fingerprint (fingerprint)')
+      console.log('[migration] users: 已新增 idx_users_fingerprint 索引')
+    }
+  } catch (alterError) {
+    console.warn('[migration] users fingerprint 迁移失败:', alterError?.message || alterError)
+  }
 
   await dbPool.query(`
     CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -180,17 +207,83 @@ async function getUserIdByToken(token) {
 
 /**
  * 按 token 创建新用户，返回其用户 ID。
+ * 可选绑定浏览器指纹，用于清站点数据后恢复身份。
  * @param {string} token 设备 token
+ * @param {string} [fingerprint] 浏览器指纹 SHA-256 hex（可选）
  * @returns {Promise<number | null>} 新建用户的 ID，token 为空时返回 null
  */
-async function createUserByToken(token) {
+async function createUserByToken(token, fingerprint) {
   const normalized = String(token || '').trim()
   if (!normalized) {
     return null
   }
 
-  await dbPool.query('INSERT INTO users (token) VALUES (?)', [normalized])
+  const fp = String(fingerprint || '').trim() || null
+  if (fp) {
+    await dbPool.query('INSERT INTO users (token, fingerprint) VALUES (?, ?)', [normalized, fp])
+  } else {
+    await dbPool.query('INSERT INTO users (token) VALUES (?)', [normalized])
+  }
   return getUserIdByToken(normalized)
+}
+
+/**
+ * 按浏览器指纹查询匹配的 token：
+ * - 0 条匹配 → 返回 null（新设备 / 指纹漂移严重）
+ * - 恰好 1 条匹配 → 返回该 token（可靠恢复）
+ * - ≥2 条匹配 → 返回 null（指纹碰撞，放弃恢复以避免串账号）
+ * @param {string} fingerprint 浏览器指纹 SHA-256 hex
+ * @returns {Promise<string | null>} 恢复到的 token
+ */
+async function getTokenByFingerprint(fingerprint) {
+  const fp = String(fingerprint || '').trim()
+  if (!fp) return null
+  const [rows] = await dbPool.query('SELECT token FROM users WHERE fingerprint = ? LIMIT 2', [fp])
+  if (Array.isArray(rows) && rows.length === 1) {
+    return String(rows[0].token)
+  }
+  return null
+}
+
+/**
+ * 给已有用户写入/更新浏览器指纹。
+ * 规则：
+ *   - DB 中 fingerprint 为空 → 直接写入（旧用户首次补录）
+ *   - DB fingerprint 与请求 fingerprint 相同 → 无操作
+ *   - 两者不同 → 仅当「新 fingerprint 在全表无占用」的安全前提下才覆盖，
+ *                防止因浏览器升级/换屏导致的指纹漂移破坏恢复能力；
+ *                同时也避免 A 的指纹被改成 B 的，造成串号风险。
+ * @param {string} token 用户 token
+ * @param {string} fingerprint 浏览器指纹 SHA-256 hex
+ * @returns {Promise<void>}
+ */
+async function setUserFingerprint(token, fingerprint) {
+  const t = String(token || '').trim()
+  const fp = String(fingerprint || '').trim()
+  if (!t || !fp) return
+
+  // 先查出当前用户的 fingerprint
+  const [rows] = await dbPool.query('SELECT fingerprint FROM users WHERE token = ? LIMIT 1', [t])
+  const current = Array.isArray(rows) ? rows[0]?.fingerprint : null
+  const currentFp = current ? String(current) : ''
+
+  if (currentFp === fp) return // 已经一致，无需 UPDATE
+  if (!currentFp) {
+    // 空值直接写，顺便保证「新 fp 无冲突」以避免罕见的唯一索引冲突
+    const [conflict] = await dbPool.query('SELECT COUNT(*) AS c FROM users WHERE fingerprint = ?', [fp])
+    const cnt = Number(Array.isArray(conflict) ? conflict[0]?.c : 0)
+    if (cnt === 0) {
+      await dbPool.query('UPDATE users SET fingerprint = ? WHERE token = ?', [fp, t])
+    }
+    return
+  }
+
+  // 非空但不同：只在「新 fp 全表没人用」时才覆盖（漂移场景）
+  const [conflictRows] = await dbPool.query('SELECT COUNT(*) AS c FROM users WHERE fingerprint = ?', [fp])
+  const conflict = Number(Array.isArray(conflictRows) ? conflictRows[0]?.c : 0)
+  if (conflict === 0) {
+    await dbPool.query('UPDATE users SET fingerprint = ? WHERE token = ?', [fp, t])
+  }
 }
 
 /**
@@ -328,6 +421,8 @@ export {
   ensureTables,
   getUserIdByToken,
   createUserByToken,
+  getTokenByFingerprint,
+  setUserFingerprint,
   sessionToPayload,
   loadSessionDetailById,
   getOrCreateUserByOpenid,

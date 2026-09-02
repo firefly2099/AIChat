@@ -1,7 +1,22 @@
 // 鉴权 / 限流 / 安全头 中间件。
 import crypto from 'node:crypto'
 import { DEVICE_TOKEN_HEADER, WINDOW_MS, MAX_REQUESTS_PER_MINUTE, MAX_CHAT_REQUESTS_PER_MINUTE, CORS_ORIGINS } from './config.js'
-import { getUserIdByToken, createUserByToken } from './db.js'
+import { getUserIdByToken, createUserByToken, getTokenByFingerprint, setUserFingerprint } from './db.js'
+
+// Cookie 中 device token 的键名
+const DEVICE_TOKEN_COOKIE = 'aichat_device_token'
+// 前端请求头中的浏览器指纹键名（与前端 FINGERPRINT_HEADER 保持一致）
+const FINGERPRINT_HEADER = 'x-fingerprint'
+// Cookie 有效期：1 年（秒）。清浏览记录通常不会连带清 Cookie，只要不主动清站点数据就能保留。
+const COOKIE_MAX_AGE_SEC = 365 * 24 * 60 * 60
+
+/**
+ * 从请求中提取浏览器指纹（同步）。
+ * @param {import('express').Request} req
+ */
+function getFingerprintFromRequest(req) {
+  return String(req.headers[FINGERPRINT_HEADER] || '').trim()
+}
 
 /**
  * 创建一个独立的 IP 限流中间件，各自维护独立的请求时间戳桶（互不影响）。
@@ -61,7 +76,7 @@ function corsMiddleware(req, res, next) {
     res.setHeader('Access-Control-Allow-Credentials', 'true')
     res.setHeader(
       'Access-Control-Allow-Headers',
-      'Content-Type, Authorization, x-device-token, Accept, Cache-Control',
+      'Content-Type, Authorization, x-device-token, x-fingerprint, Accept, Cache-Control',
     )
     res.setHeader(
       'Access-Control-Allow-Methods',
@@ -91,7 +106,9 @@ function generateDeviceToken() {
 }
 
 /**
- * 从请求中提取设备 token：优先读自定义请求头，其次尝试 Authorization: Bearer。
+ * 从请求中提取 device token：
+ * 优先级：自定义请求头 x-device-token > Authorization Bearer > Cookie。
+ * 设计意图：localStorage 存一份（加载快、前端可读到），Cookie 存一份（持久化兜底清缓存场景）。
  * @param {import('express').Request} req
  * @returns {string} 提取到的 token，未找到时返回空串
  */
@@ -102,12 +119,16 @@ function getTokenFromRequest(req) {
   }
 
   const authHeader = String(req.headers.authorization || '').trim()
-  if (!authHeader) {
-    return ''
+  if (authHeader) {
+    const matched = authHeader.match(/^Bearer\s+(.+)$/i)
+    if (matched?.[1]) {
+      return matched[1].trim()
+    }
   }
 
-  const matched = authHeader.match(/^Bearer\s+(.+)$/i)
-  return matched?.[1]?.trim() || ''
+  // localStorage 被清时的回退：只要没清 Cookie 就能恢复身份
+  const fromCookie = String(req.cookies?.[DEVICE_TOKEN_COOKIE] || '').trim()
+  return fromCookie
 }
 
 /**
@@ -151,8 +172,13 @@ function securityHeadersMiddleware(req, res, next) {
 }
 
 /**
- * 仅对 /api/models 做 token 引导：若无有效 token 则生成并写入 users 表，
- * 再通过响应头 x-device-token 返回给前端。其它路径直接放行。
+ * 仅对 /api/models 做 token 引导。
+ * 身份恢复优先级：
+ *   ① x-device-token / Authorization 请求头 —— 前端 localStorage 写入，立即生效
+ *   ② aichat_device_token Cookie（1 年持久化）—— 清浏览记录、localStorage 丢失的兜底
+ *   ③ 浏览器指纹（x-fingerprint）—— 清「Cookie 和站点数据」全清场景的最后兜底；
+ *       仅 fingerprint 在 users 表 1:1 命中时才恢复（≥2 条即碰撞，不恢复以免串账号）
+ * 都没命中时才创建新用户，并把浏览器指纹绑定到新建用户。
  */
 async function ensureToken(req, res, next) {
   if (req.path !== '/api/models') {
@@ -160,21 +186,49 @@ async function ensureToken(req, res, next) {
   }
 
   try {
+    const fingerprint = getFingerprintFromRequest(req)
+
+    // ① 先取 header + cookie 里已有 token
     let token = getTokenFromRequest(req)
     if (token) {
       const userId = await getUserIdByToken(token)
-      if (!userId) {
-        token = ''
+      if (!userId) token = ''
+    }
+
+    // ② header/cookie 都没命中，尝试指纹恢复
+    let source = 'header-or-cookie'
+    if (!token && fingerprint) {
+      const recovered = await getTokenByFingerprint(fingerprint)
+      if (recovered) {
+        token = recovered
+        source = 'fingerprint'
       }
     }
 
+    // ③ 都没命中 → 创建新用户；把 fingerprint 一并绑定到 DB（如存在）
     if (!token) {
       token = generateDeviceToken()
-      await createUserByToken(token)
+      await createUserByToken(token, fingerprint || undefined)
+      source = fingerprint ? 'new-user-with-fp' : 'new-user'
+    } else if (fingerprint) {
+      // 用 header/cookie 拿到了 token，但 fingerprint 可能是空值；顺手给这条 user 把 fingerprint 补上，
+      // 下次清站点数据时就能靠指纹找回。
+      await setUserFingerprint(token, fingerprint)
     }
 
     req.deviceToken = token
     res.setHeader('x-device-token', token)
+    // 持久 Cookie 兜底：HttpOnly 防 JS 窃取，前后端跨域必须 SameSite=None + Secure。
+    res.cookie(DEVICE_TOKEN_COOKIE, token, {
+      maxAge: COOKIE_MAX_AGE_SEC * 1000,
+      httpOnly: true,
+      sameSite: 'none',
+      secure: true,
+      path: '/',
+    })
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[ensureToken] source=${source} token=${token.slice(0, 8)}…`)
+    }
     next()
   } catch (error) {
     console.error('Token bootstrap failed:', error)

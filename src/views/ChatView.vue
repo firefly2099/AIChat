@@ -977,12 +977,14 @@ async function streamReply(userText: string, options: { reuseLastAssistant?: boo
 
   try {
     // 改用 POST 提交，避免长消息触发 URL 长度限制
-    const streamHeaders = buildAuthHeaders()
+    const streamHeaders = await buildAuthHeaders()
     streamHeaders.set('Content-Type', 'application/json')
 
     const response = await fetch(apiUrl('/api/chat/stream'), {
       method: 'POST',
       headers: streamHeaders,
+      // 必须 include：确保跨域请求带后端持久化 token cookie，清 localStorage 后身份不漂移
+      credentials: 'include',
       body: JSON.stringify({
         model: selectedModel.value,
         message: userText,

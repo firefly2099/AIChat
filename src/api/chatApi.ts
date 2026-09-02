@@ -1,4 +1,6 @@
 // 后端 API 客户端：device token 管理 + 模型 / 会话 / SSE 头部封装。
+import { getDeviceFingerprint, FINGERPRINT_HEADER } from '@/utils/fingerprint'
+
 const DEVICE_TOKEN_KEY = 'aichat_device_token'
 
 /**
@@ -88,7 +90,11 @@ function setDeviceToken(token: string) {
   getStorage()?.setItem(DEVICE_TOKEN_KEY, nextToken)
 }
 
-function buildHeaders(extraHeaders?: HeadersInit) {
+/**
+ * 构造所有请求共用的 Headers：device token + 浏览器指纹。
+ * 指纹是异步计算的，但只算一次（模块级缓存），因此第二次起几乎无开销。
+ */
+async function buildHeaders(extraHeaders?: HeadersInit) {
   const headers = new Headers(extraHeaders || {})
   const token = getDeviceToken()
 
@@ -97,6 +103,12 @@ function buildHeaders(extraHeaders?: HeadersInit) {
     headers.set('Authorization', `Bearer ${token}`)
   }
 
+  try {
+    const fp = await getDeviceFingerprint()
+    if (fp) headers.set(FINGERPRINT_HEADER, fp)
+  } catch {
+    // 指纹计算失败不阻塞请求：最不济就是按新设备走
+  }
   return headers
 }
 
@@ -113,7 +125,10 @@ async function parseErrorMessage(response: Response) {
 async function requestJSON<T>(url: string, init: RequestInit = {}, options: RequestOptions = {}) {
   const response = await fetch(url, {
     ...init,
-    headers: buildHeaders(init.headers),
+    headers: await buildHeaders(init.headers),
+    // 跨域 fetch 必须显式 include，才能把后端（Railway）Set-Cookie 的持久化 token cookie 带上，
+    // 否则清 localStorage 后会被当新用户，导致会话丢失。
+    credentials: 'include',
   })
 
   const responseToken = response.headers.get('x-device-token') || ''
@@ -348,7 +363,7 @@ export async function batchDeleteSessions(sessionIds: string[]) {
  * 构造 SSE 流式聊天请求所需的请求头（Accept: text/event-stream + token 鉴权）。
  * @returns {Headers}
  */
-export function buildAuthHeaders() {
+export async function buildAuthHeaders() {
   const headers = new Headers({
     Accept: 'text/event-stream',
   })
@@ -359,5 +374,11 @@ export function buildAuthHeaders() {
     headers.set('Authorization', `Bearer ${token}`)
   }
 
+  try {
+    const fp = await getDeviceFingerprint()
+    if (fp) headers.set(FINGERPRINT_HEADER, fp)
+  } catch {
+    // 指纹失败不阻塞
+  }
   return headers
 }
