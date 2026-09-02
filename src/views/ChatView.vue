@@ -1054,8 +1054,10 @@ async function streamReply(userText: string, options: { reuseLastAssistant?: boo
           }
 
           // 后端返回 R2 图片 URL，存入最后一条用户消息用于刷新后恢复
+          // 注意：不用 findLast（ES2023），CI tsconfig lib 未到 es2023 会报 TS2550
           if (payload.type === 'images' && Array.isArray(payload.urls)) {
-            const lastUserMsg = messages.value.findLast((m) => m.role === 'user')
+            const userMsgs = messages.value.filter((m: Message) => m.role === 'user')
+            const lastUserMsg = userMsgs.length > 0 ? userMsgs[userMsgs.length - 1] : undefined
             if (lastUserMsg) {
               lastUserMsg.imageUrls = payload.urls
               void persistSession()
