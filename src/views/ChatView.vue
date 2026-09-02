@@ -26,9 +26,11 @@ type Message = {
   id: number
   role: 'user' | 'assistant'
   content: string
-  // 用户上传的图片附件（base64 data URL）。
+  // 用户上传的图片附件（base64 data URL 或 R2 公开 URL）。
   // url 用于气泡展示，mime 在重新生成/继续生成时恢复 streamReply 的 images 参数（后端上传 Files API 需要）。
   attachments?: { url: string; mime: string }[]
+  // R2 持久化图片 URL 列表（由后端通过 SSE images 事件返回，存入数据库用于刷新恢复）
+  imageUrls?: string[]
   // 非图片文件的元信息（名称/大小），仅用于气泡展示，文本内容见 fileContext
   files?: { name: string; size: number }[]
   // 非图片文件提取的文本，发送时拼进 prompt；重新生成/继续生成时一并带上
@@ -640,16 +642,17 @@ const flushRemoteSnapshot = async () => {
   pendingSnapshot = null
   if (!snapshot) return
 
-  // 快照落库前，先把附件扩展信息（图片/文件/提取文本）写入 localStorage。
-  // 后端不存这些字段，刷新后需靠本地按下标合并回消息。
+  // 快照落库前，先把附件扩展信息（图片 base64 / 文件元信息 / 提取文本 / R2 URL）写入 localStorage。
+  // 后端不存 attachments/files/fileContext，刷新后需靠本地按下标合并回消息。
+  // imageUrls 已存入后端，这里也写 localStorage 作为双重备份。
   // 用客户端消息 id 匹配快照数组下标，保证下标与后端 sort_order 对齐。
-  const extrasById = new Map<number, { attachments?: { url: string; mime: string }[]; files?: { name: string; size: number }[]; fileContext?: string }>()
+  const extrasById = new Map<number, { attachments?: { url: string; mime: string }[]; files?: { name: string; size: number }[]; fileContext?: string; imageUrls?: string[] }>()
   for (const m of messages.value) {
-    if (m.attachments?.length || m.files?.length || m.fileContext) {
-      extrasById.set(m.id, { attachments: m.attachments, files: m.files, fileContext: m.fileContext })
+    if (m.attachments?.length || m.files?.length || m.fileContext || m.imageUrls?.length) {
+      extrasById.set(m.id, { attachments: m.attachments, files: m.files, fileContext: m.fileContext, imageUrls: m.imageUrls })
     }
   }
-  const extrasByIndex: Record<number, { attachments?: { url: string; mime: string }[]; files?: { name: string; size: number }[]; fileContext?: string }> = {}
+  const extrasByIndex: Record<number, { attachments?: { url: string; mime: string }[]; files?: { name: string; size: number }[]; fileContext?: string; imageUrls?: string[] }> = {}
   snapshot.messages.forEach((m, i) => {
     const ex = extrasById.get(m.id)
     if (ex) extrasByIndex[i] = ex
@@ -683,7 +686,8 @@ const scheduleRemoteSnapshot = () => {
     thinkingEnabled: thinkingEnabled.value,
     searchEnabled: searchEnabled.value,
     // 剥离 attachments：base64 仅用于本地气泡展示，不写后端避免快照膨胀
-    messages: messages.value.map((m) => ({ id: m.id, role: m.role, content: m.content })),
+    // 保留 imageUrls：R2 公开 URL 体积小，存入后端用于刷新恢复
+    messages: messages.value.map((m) => ({ id: m.id, role: m.role, content: m.content, imageUrls: m.imageUrls })),
   }
 
   if (remoteSnapshotTimer != null) {
@@ -792,14 +796,24 @@ const restoreSession = async (id: string) => {
   if (!modeButtonsHydrated) modeButtonsHydrated = true
 
   messages.value = target.messages || []
-  // 合并本地附件扩展信息（图片 base64 / 文件元信息 / 提取文本）：
-  // 后端 chat_messages 不存这些字段，刷新后靠 localStorage 按下标补回。
+  // 合并本地附件扩展信息（图片 base64 / 文件元信息 / 提取文本 / R2 URL）：
+  // 后端 chat_messages 存了 imageUrls 但不存 attachments/files/fileContext，刷新后靠 localStorage 按下标补回。
+  // 优先用后端 imageUrls 构造 attachments（R2 URL），localStorage base64 作为回退。
   const extras = loadMessageExtras(id)
-  if (Object.keys(extras).length > 0) {
+  if (Object.keys(extras).length > 0 || messages.value.some((m) => m.imageUrls?.length)) {
     messages.value = messages.value.map((m, i): Message => {
       const ex = extras[i]
+      // 优先用后端 imageUrls 恢复图片附件
+      if (m.imageUrls?.length && !m.attachments?.length) {
+        return {
+          ...m,
+          attachments: m.imageUrls.map((url) => ({ url, mime: '' })),
+          files: ex?.files,
+          fileContext: ex?.fileContext,
+        } as Message
+      }
       if (!ex) return { ...m } as Message
-      return { ...m, attachments: ex.attachments, files: ex.files, fileContext: ex.fileContext } as Message
+      return { ...m, attachments: ex.attachments, files: ex.files, fileContext: ex.fileContext, imageUrls: ex.imageUrls || m.imageUrls } as Message
     })
   }
   chatTitle.value = target.title || '新对话'
@@ -1037,6 +1051,15 @@ async function streamReply(userText: string, options: { reuseLastAssistant?: boo
 
           if (payload.type === 'done') {
             receivedData = true
+          }
+
+          // 后端返回 R2 图片 URL，存入最后一条用户消息用于刷新后恢复
+          if (payload.type === 'images' && Array.isArray(payload.urls)) {
+            const lastUserMsg = messages.value.findLast((m) => m.role === 'user')
+            if (lastUserMsg) {
+              lastUserMsg.imageUrls = payload.urls
+              void persistSession()
+            }
           }
         } catch (parseError) {
           // done 事件或其他非 chunk/error 类型忽略，不阻断流

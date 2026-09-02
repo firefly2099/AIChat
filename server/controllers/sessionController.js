@@ -16,7 +16,7 @@ async function listSessions(req, res) {
     const sessions = []
     for (const row of Array.isArray(rows) ? rows : []) {
       const [msgRows] = await dbPool.query(
-        'SELECT id, role, content, sort_order FROM chat_messages WHERE session_id = ? ORDER BY sort_order ASC, id ASC',
+        'SELECT id, role, content, sort_order, image_urls FROM chat_messages WHERE session_id = ? ORDER BY sort_order ASC, id ASC',
         [row.id],
       )
       sessions.push(sessionToPayload(row, Array.isArray(msgRows) ? msgRows : []))
@@ -93,10 +93,14 @@ async function createSession(req, res) {
       const item = messages[i]
       const role = item?.role === 'assistant' ? 'assistant' : 'user'
       const content = String(item?.content || '').slice(0, MAX_MESSAGE_LENGTH)
+      // 将 image_urls 数组序列化为 JSON 字符串存储
+      const imageUrlsValue = Array.isArray(item?.imageUrls) && item.imageUrls.length > 0
+        ? JSON.stringify(item.imageUrls)
+        : null
 
       await dbPool.query(
-        'INSERT INTO chat_messages (session_id, role, content, sort_order) VALUES (?, ?, ?, ?)',
-        [id, role, content, i],
+        'INSERT INTO chat_messages (session_id, role, content, sort_order, image_urls) VALUES (?, ?, ?, ?, ?)',
+        [id, role, content, i, imageUrlsValue],
       )
     }
 
@@ -150,10 +154,13 @@ async function saveSnapshot(req, res) {
       const item = messages[i]
       const role = item?.role === 'assistant' ? 'assistant' : 'user'
       const content = String(item?.content || '').slice(0, MAX_MESSAGE_LENGTH)
+      const imageUrlsValue = Array.isArray(item?.imageUrls) && item.imageUrls.length > 0
+        ? JSON.stringify(item.imageUrls)
+        : null
 
       await dbPool.query(
-        'INSERT INTO chat_messages (session_id, role, content, sort_order) VALUES (?, ?, ?, ?)',
-        [sessionId, role, content, i],
+        'INSERT INTO chat_messages (session_id, role, content, sort_order, image_urls) VALUES (?, ?, ?, ?, ?)',
+        [sessionId, role, content, i, imageUrlsValue],
       )
     }
 

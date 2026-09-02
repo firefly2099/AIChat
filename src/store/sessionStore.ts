@@ -163,6 +163,7 @@ export type MessageExtras = {
   attachments?: { url: string; mime: string }[]
   files?: { name: string; size: number }[]
   fileContext?: string
+  imageUrls?: string[]
 }
 
 const MSG_EXTRAS_PREFIX = 'aichat_msg_extras:'

@@ -99,6 +99,20 @@ async function ensureTables() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   `)
 
+  // 微信小程序用户表：存 openid / nickname / avatar
+  await dbPool.query(`
+    CREATE TABLE IF NOT EXISTS wx_users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      openid VARCHAR(64) NOT NULL,
+      nickname VARCHAR(128) NOT NULL DEFAULT '',
+      avatar_url VARCHAR(512) NOT NULL DEFAULT '',
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uniq_wx_users_openid (openid)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `)
+
   // 升级已有库：把 chat_messages.content 由 TEXT 扩为 MEDIUMTEXT，
   // 避免长文档（含中文/emoji 多字节）写入时被 65KB 限制截断或报错。
   try {
@@ -112,6 +126,30 @@ async function ensureTables() {
     }
   } catch (alterError) {
     console.warn('[migration] chat_messages content 类型升级失败:', alterError?.message || alterError)
+  }
+
+  // R2 图片存储计数表：记录已用容量，达免费额度 90% 后停止上传
+  await dbPool.query(`
+    CREATE TABLE IF NOT EXISTS storage_stats (
+      id TINYINT UNSIGNED NOT NULL DEFAULT 1,
+      total_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  `)
+
+  // 迁移：给 chat_messages 加 image_urls 列（JSON 数组，存 R2 公开 URL）
+  try {
+    const [cols] = await dbPool.query(
+      "SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'chat_messages' AND COLUMN_NAME = 'image_urls'",
+    )
+    const colExists = Number(Array.isArray(cols) ? cols[0]?.c : 0) > 0
+    if (!colExists) {
+      await dbPool.query('ALTER TABLE chat_messages ADD COLUMN image_urls TEXT NULL DEFAULT NULL AFTER content')
+      console.log('[migration] chat_messages: 已新增 image_urls 列')
+    }
+  } catch (alterError) {
+    console.warn('[migration] chat_messages image_urls 迁移失败:', alterError?.message || alterError)
   }
 }
 
@@ -169,11 +207,26 @@ function sessionToPayload(sessionRow, messageRows) {
     thinkingEnabled: Boolean(sessionRow.thinking_enabled),
     searchEnabled: Boolean(sessionRow.search_enabled),
     pinned: Boolean(sessionRow.pinned),
-    messages: (messageRows || []).map((item) => ({
-      id: Number(item.id),
-      role: item.role,
-      content: String(item.content || ''),
-    })),
+    messages: (messageRows || []).map((item) => {
+      // image_urls 存为 JSON 字符串，解析失败时返回空数组
+      let imageUrls = []
+      if (item.image_urls) {
+        try {
+          const parsed = JSON.parse(item.image_urls)
+          if (Array.isArray(parsed)) {
+            imageUrls = parsed.filter((u) => typeof u === 'string' && u)
+          }
+        } catch {
+          // 非 JSON 格式，忽略
+        }
+      }
+      return {
+        id: Number(item.id),
+        role: item.role,
+        content: String(item.content || ''),
+        imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
+      }
+    }),
     createdAt: sessionRow.created_at,
     updatedAt: sessionRow.updated_at,
   }
@@ -197,11 +250,77 @@ async function loadSessionDetailById(userId, sessionId) {
   }
 
   const [messageRows] = await dbPool.query(
-    'SELECT id, role, content, sort_order FROM chat_messages WHERE session_id = ? ORDER BY sort_order ASC, id ASC',
+    'SELECT id, role, content, sort_order, image_urls FROM chat_messages WHERE session_id = ? ORDER BY sort_order ASC, id ASC',
     [sessionId],
   )
 
   return sessionToPayload(sessionRow, Array.isArray(messageRows) ? messageRows : [])
+}
+
+/**
+ * 微信小程序：按 openid 查询或创建用户。
+ * 复用现有 users 表（token = openid），保证会话/消息接口无需改动。
+ * @param {string} openid 微信 openid
+ * @returns {Promise<number | null>} 用户 ID
+ */
+async function getOrCreateUserByOpenid(openid) {
+  const normalized = String(openid || '').trim()
+  if (!normalized) return null
+
+  // 先查 tokenCache（openid 即 token）
+  const cached = tokenCache.get(normalized)
+  if (cached && Date.now() - cached.t < TOKEN_CACHE_TTL) {
+    return cached.id
+  }
+
+  // 查 users 表
+  let userId = await getUserIdByToken(normalized)
+  if (!userId) {
+    userId = await createUserByToken(normalized)
+  }
+  return userId
+}
+
+/**
+ * 微信小程序：保存或更新微信用户资料（昵称、头像）。
+ * @param {string} openid
+ * @param {string} nickname
+ * @param {string} avatarUrl
+ * @returns {Promise<void>}
+ */
+async function upsertWxUser(openid, nickname, avatarUrl) {
+  const normalizedOpenid = String(openid || '').trim()
+  if (!normalizedOpenid) return
+
+  await dbPool.query(
+    `INSERT INTO wx_users (openid, nickname, avatar_url)
+     VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), avatar_url = VALUES(avatar_url)`,
+    [normalizedOpenid, String(nickname || '').slice(0, 128), String(avatarUrl || '').slice(0, 512)],
+  )
+}
+
+/**
+ * 微信小程序：按 openid 查询微信用户资料。
+ * @param {string} openid
+ * @returns {Promise<{ openid: string, nickname: string, avatarUrl: string } | null>}
+ */
+async function getWxUserByOpenid(openid) {
+  const normalized = String(openid || '').trim()
+  if (!normalized) return null
+
+  const [rows] = await dbPool.query(
+    'SELECT openid, nickname, avatar_url FROM wx_users WHERE openid = ? LIMIT 1',
+    [normalized],
+  )
+  const row = Array.isArray(rows) ? rows[0] : null
+  if (!row) return null
+
+  return {
+    openid: String(row.openid),
+    nickname: String(row.nickname || ''),
+    avatarUrl: String(row.avatar_url || ''),
+  }
 }
 
 export {
@@ -211,4 +330,7 @@ export {
   createUserByToken,
   sessionToPayload,
   loadSessionDetailById,
+  getOrCreateUserByOpenid,
+  upsertWxUser,
+  getWxUserByOpenid,
 }

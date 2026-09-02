@@ -10,6 +10,7 @@ import {
   getFriendlyErrorMessage,
   sanitizeModelId,
 } from '../services/chatService.js'
+import { uploadImageToR2 } from '../services/r2Service.js'
 
 /**
  * 流式聊天接口。
@@ -83,11 +84,28 @@ async function streamChat(req, res) {
       }
 
       const content = [{ type: 'text', text: messageWithFeatures }]
+      // R2 上传结果：成功上传的图片公开 URL，通过 SSE 返回给前端持久化
+      const r2Urls = []
       for (const img of validImages) {
         const fileId = await uploadImageToDeepSeekFiles(img.url, img.mime, provider.key)
         content.push({ type: 'file', file_id: fileId })
+
+        // 同步上传到 R2 做持久存储（未配置或容量超限时返回 null，自动跳过）
+        const commaIdx = img.url.indexOf(',')
+        const base64Part = commaIdx >= 0 ? img.url.slice(commaIdx + 1) : img.url
+        const buffer = Buffer.from(base64Part, 'base64')
+        const inferredMime = img.mime || (img.url.match(/data:([^;]+)/)?.[1]) || 'image/jpeg'
+        const r2Url = await uploadImageToR2(buffer, inferredMime)
+        if (r2Url) {
+          r2Urls.push(r2Url)
+        }
       }
       upstreamMessages = [{ role: 'user', content }]
+
+      // 将 R2 图片 URL 通过 SSE 返回给前端，前端存入用户消息用于刷新后恢复
+      if (r2Urls.length > 0) {
+        res.write(`data: ${JSON.stringify({ type: 'images', urls: r2Urls })}\n\n`)
+      }
       // 仅 deepseek-v4-flash-vision-exp 支持图片输入，有图片时强制切到视觉模型
       requestModel = 'deepseek-v4-flash-vision-exp'
     } else {

@@ -39,12 +39,14 @@ export type ApiSessionMessage = {
   id: number
   role: 'user' | 'assistant'
   content: string
+  imageUrls?: string[]
 }
 
 export type ApiSessionMessageInput = {
   id?: number
   role: 'user' | 'assistant'
   content: string
+  imageUrls?: string[]
 }
 
 export type ApiSession = {
@@ -151,6 +153,7 @@ function normalizeSessionMessage(item: ApiSessionMessageInput, index: number): A
     id: typeof item.id === 'number' ? item.id : Date.now() + index,
     role: item.role === 'assistant' ? 'assistant' : 'user',
     content: String(item.content || ''),
+    imageUrls: Array.isArray(item.imageUrls) ? item.imageUrls : undefined,
   }
 }
 
